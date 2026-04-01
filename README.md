@@ -1,12 +1,9 @@
-<div align="center">
+<div>
 
 <h1><code>wee_alloc_bw: Initiative to revive <a href="https://github.com/rustwasm/wee_alloc">wee_alloc</a></code></h1>
-wee_alloc is a widely used allocator in the Rust WebAssembly ecosystem, but the original project is no longer maintained and has outstanding issues.
-
-This fork revives the project with a focus on correctness, reliability, and active maintenance.
-We prioritize building a comprehensive test suite and addressing known issues before introducing changes.
-
-Maintaining API compatibility with the original crate is a key goal.
+<p>
+wee_alloc is a widely used allocator in the Rust WebAssembly ecosystem, but the original project is no longer maintained and has outstanding issues. This fork revives the project with a focus on correctness, reliability, and active maintenance. We prioritize building a comprehensive test suite and addressing known issues before introducing changes. Maintaining API compatibility with the original crate is a key goal.
+</p>
 
   <strong>The <u>W</u>asm-<u>E</u>nabled, <u>E</u>lfin Allocator</strong>
 
