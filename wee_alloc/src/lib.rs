@@ -48,7 +48,8 @@ static ALLOC: wee_alloc_bw::WeeAlloc = wee_alloc_bw::WeeAlloc::INIT;
 
 - **size_classes**: On by default. Use size classes for smaller allocations to
   provide amortized *O(1)* allocation for them. Increases uncompressed `.wasm`
-  code size by about 450 bytes (up to a total of ~1.2K).
+  code size by about 450 bytes (up to a total of ~1.2K). It is however slow
+  without this feature, only turn off if there are really only few allocations.
 
 - **extra_assertions**: Enable various extra, expensive integrity assertions and
   defensive mechanisms, such as poisoning freed memory. This incurs a large

@@ -352,13 +352,15 @@ impl Operations {
         histogram
     }
 
-    pub fn read_trace(trace: &str) -> Self {
+    pub fn read_trace(trace: &str, cap: usize) -> Self {
         let trace = Path::new(trace);
         let trace_dir = Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/traces"));
         let mut file = fs::File::open(trace_dir.join(trace)).unwrap();
         let mut contents = String::new();
         file.read_to_string(&mut contents).unwrap();
-        contents.parse().unwrap()
+        let mut ops: Self = contents.parse().unwrap();
+        ops.0.truncate(cap);
+        ops
     }
 }
 
@@ -424,9 +426,12 @@ quickcheck! {
 macro_rules! test_trace {
     ($name:ident, $trace:expr) => {
         #[test]
-        #[cfg_attr(not(feature = "size_classes"), ignore)]
         fn $name() {
-            let ops = Operations::read_trace($trace);
+            #[cfg(feature = "size_classes")]
+            let cap = usize::max_value();
+            #[cfg(not(feature = "size_classes"))]
+            let cap = 200; // limit number of steps because without size_classes it is very slow.
+            let ops = Operations::read_trace($trace, cap);
             ops.run_single_threaded();
         }
     };

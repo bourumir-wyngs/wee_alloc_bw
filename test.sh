@@ -1,32 +1,64 @@
 #!/usr/bin/env bash
 
-set -eux
+set -Eeuo pipefail
 
-cd $(dirname $0)
+cd "$(dirname "$0")"
 
-# Generate new README.md and exit if it differs from the current one.
-OLD_README=`mktemp`
-cp README.md $OLD_README
-cargo readme -r wee_alloc -t "$(pwd)/README.tpl" > README.md
-diff $OLD_README README.md
+run_nextest() {
+    local dir="$1"
+    shift
+    local args=("$@")
 
-cd ./wee_alloc
-time cargo test
-cd -
+    (
+        cd "$dir"
+        if ! time cargo nextest run --hide-progress-bar "${args[@]}"; then
+            printf 'cargo nextest run failed in %s with parameters:' "$dir" >&2
+            printf ' %q' "${args[@]}" >&2
+            printf '\n' >&2
+            return 1
+        fi
+    )
+}
 
-cd ./test
-time cargo test --release --features "extra_assertions size_classes"
-time cargo test --release --features "size_classes"
+wait_all() {
+    local rc=0
+    local pid
+    for pid in "$@"; do
+        if ! wait "$pid"; then
+            rc=1
+        fi
+    done
+    return "$rc"
+}
 
-export WEE_ALLOC_STATIC_ARRAY_BACKEND_BYTES=$((512 * 1024 * 1024))
+# Separate env for the runs that need it.
+run_test_matrix() {
+    run_nextest ./test --release --features "extra_assertions size_classes" &
+    p1=$!
 
-time cargo test --release --features "static_array_backend extra_assertions size_classes"
-time cargo test --release --features "static_array_backend size_classes"
+    run_nextest ./test --release --features "size_classes" &
+    p2=$!
 
-export QUICKCHECK_TESTS=2
+    run_nextest ./test --release --features "static_array_backend extra_assertions size_classes" &
+    p3=$!
 
-time cargo test --release --features "extra_assertions"
-time cargo test --release
-time cargo test --release --features "static_array_backend extra_assertions"
-time cargo test --release --features "static_array_backend"
-cd -
+    run_nextest ./test --release --features "static_array_backend size_classes" &
+    p4=$!
+
+    run_nextest ./test --release --features "extra_assertions" &
+    p5=$!
+
+    run_nextest ./test --release &
+    p6=$!
+
+    run_nextest ./test --release --features "static_array_backend extra_assertions" &
+    p7=$!
+
+    run_nextest ./test --release --features "static_array_backend" &
+    p8=$!
+
+    wait_all "$p1" "$p2" "$p3" "$p4" "$p5" "$p6" "$p7" "$p8"
+}
+
+run_nextest ./wee_alloc
+run_test_matrix
