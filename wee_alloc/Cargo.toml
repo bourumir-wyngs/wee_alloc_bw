@@ -27,6 +27,8 @@ nightly = []
 extra_assertions = []
 
 # Enable size classes for amortized *O(1)* small allocations.
+# Disabling this feature has big impact on performance for workloads with
+# such allocations.
 size_classes = []
 
 # Enable fixed-sized, OS-independent backing memory implementation

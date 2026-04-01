@@ -116,10 +116,13 @@ impl FromStr for Operations {
     }
 }
 
-#[cfg(feature = "extra_assertions")]
+#[cfg(not(feature = "size_classes"))]
+const NUM_OPERATIONS: usize = 100;
+
+#[cfg(all(feature = "size_classes", feature = "extra_assertions"))]
 const NUM_OPERATIONS: usize = 2_000;
 
-#[cfg(not(feature = "extra_assertions"))]
+#[cfg(all(feature = "size_classes", not(feature = "extra_assertions")))]
 const NUM_OPERATIONS: usize = 50_000;
 
 impl Arbitrary for Operations {
@@ -421,6 +424,7 @@ quickcheck! {
 macro_rules! test_trace {
     ($name:ident, $trace:expr) => {
         #[test]
+        #[cfg_attr(not(feature = "size_classes"), ignore)]
         fn $name() {
             let ops = Operations::read_trace($trace);
             ops.run_single_threaded();

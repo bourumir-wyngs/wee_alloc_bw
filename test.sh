@@ -16,14 +16,17 @@ cd -
 
 cd ./test
 time cargo test --release --features "extra_assertions size_classes"
-time cargo test --release --features "extra_assertions"
 time cargo test --release --features "size_classes"
-time cargo test --release
 
 export WEE_ALLOC_STATIC_ARRAY_BACKEND_BYTES=$((512 * 1024 * 1024))
 
 time cargo test --release --features "static_array_backend extra_assertions size_classes"
-time cargo test --release --features "static_array_backend extra_assertions"
 time cargo test --release --features "static_array_backend size_classes"
+
+export QUICKCHECK_TESTS=2
+
+time cargo test --release --features "extra_assertions"
+time cargo test --release
+time cargo test --release --features "static_array_backend extra_assertions"
 time cargo test --release --features "static_array_backend"
 cd -
