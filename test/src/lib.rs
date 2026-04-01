@@ -6,10 +6,14 @@ extern crate quickcheck;
 #[macro_use]
 extern crate cfg_if;
 extern crate rand;
-extern crate wee_alloc;
+extern crate wee_alloc_bw;
 
 use quickcheck::{Arbitrary, Gen};
-use std::alloc::{Alloc, Layout};
+use std::alloc::Layout;
+#[cfg(not(feature = "allocator_api"))]
+use std::alloc::GlobalAlloc;
+#[cfg(feature = "allocator_api")]
+use std::alloc::Allocator;
 use std::f64;
 use std::fs;
 use std::io::Read;
@@ -44,7 +48,7 @@ impl Operation {
             return Alloc(0);
         }
 
-        // XXX: Keep this synced with `wee_alloc`.
+        // XXX: Keep this synced with `wee_alloc_bw`.
         const NUM_SIZE_CLASSES: usize = 256;
 
         let max_small_alloc_size = (NUM_SIZE_CLASSES + 1) * mem::size_of::<usize>();
@@ -247,13 +251,16 @@ impl Arbitrary for Operations {
 
 impl Operations {
     pub fn run_single_threaded(&self) {
-        self.run_with_allocator(&wee_alloc::WeeAlloc::INIT);
+        #[cfg(feature = "allocator_api")]
+        self.run_with_allocator(&wee_alloc_bw::WeeAlloc::INIT);
+        #[cfg(not(feature = "allocator_api"))]
+        self.run_with_allocator(&wee_alloc_bw::WeeAlloc::INIT);
     }
 
     pub fn run_multi_threaded(ops0: Self, ops1: Self, ops2: Self, ops3: Self) {
         use std::thread;
 
-        static WEE: wee_alloc::WeeAlloc = wee_alloc::WeeAlloc::INIT;
+        static WEE: wee_alloc_bw::WeeAlloc = wee_alloc_bw::WeeAlloc::INIT;
 
         let handle0 = thread::spawn(move || ops0.run_with_allocator(&WEE));
         let handle1 = thread::spawn(move || ops1.run_with_allocator(&WEE));
@@ -266,14 +273,16 @@ impl Operations {
         handle3.join().expect("Thread 3 Failed");
     }
 
-    pub fn run_with_allocator<A: Alloc>(&self, mut a: A) {
+    #[cfg(feature = "allocator_api")]
+    pub fn run_with_allocator<A: Allocator>(&self, mut a: A) {
+        use std::ptr::NonNull;
         let mut allocs = vec![];
         for op in self.0.iter().cloned() {
             match op {
                 Alloc(n) => {
                     let layout = Layout::from_size_align(n, mem::size_of::<usize>()).unwrap();
-                    allocs.push(match unsafe { a.alloc(layout.clone()) } {
-                        Ok(ptr) => Some((ptr, layout)),
+                    allocs.push(match a.allocate(layout.clone()) {
+                        Ok(ptr) => Some((ptr.cast::<u8>(), layout)),
                         Err(_) => None,
                     });
                 }
@@ -281,7 +290,35 @@ impl Operations {
                     if let Some(entry) = allocs.get_mut(idx) {
                         if let Some((ptr, layout)) = entry.take() {
                             unsafe {
-                                a.dealloc(ptr, layout);
+                                a.deallocate(ptr, layout);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    #[cfg(not(feature = "allocator_api"))]
+    pub fn run_with_allocator<A: GlobalAlloc>(&self, a: &A) {
+        use std::ptr::NonNull;
+        let mut allocs = vec![];
+        for op in self.0.iter().cloned() {
+            match op {
+                Alloc(n) => {
+                    let layout = Layout::from_size_align(n, mem::size_of::<usize>()).unwrap();
+                    let ptr = unsafe { a.alloc(layout.clone()) };
+                    allocs.push(if !ptr.is_null() {
+                        Some((NonNull::new(ptr).unwrap(), layout))
+                    } else {
+                        None
+                    });
+                }
+                Free(idx) => {
+                    if let Some(entry) = allocs.get_mut(idx) {
+                        if let Some((ptr, layout)) = entry.take() {
+                            unsafe {
+                                a.dealloc(ptr.as_ptr(), layout);
                             }
                         }
                     }
@@ -374,7 +411,7 @@ quickcheck! {
         let size = size % 65536;
         let align = ALIGNS[align % ALIGNS.len()];
 
-        let mut w = &wee_alloc::WeeAlloc::INIT;
+        let mut w = &wee_alloc_bw::WeeAlloc::INIT;
         let layout = Layout::from_size_align(size, align).unwrap();
         let _ = unsafe { w.alloc(layout) };
     }
@@ -477,39 +514,76 @@ fn allocate_many_large() {
 
 #[test]
 fn smoke() {
-    let mut a = &wee_alloc::WeeAlloc::INIT;
+    let a = &wee_alloc_bw::WeeAlloc::INIT;
     unsafe {
         let layout = Layout::new::<u8>();
+        #[cfg(feature = "allocator_api")]
         let ptr = a
-            .alloc(layout.clone())
-            .expect("Should be able to alloc a fresh Layout clone");
+            .allocate(layout.clone())
+            .expect("Should be able to alloc a fresh Layout clone")
+            .cast::<u8>();
+        #[cfg(not(feature = "allocator_api"))]
+        let ptr = {
+            let p = a.alloc(layout.clone());
+            assert!(!p.is_null());
+            std::ptr::NonNull::new(p).unwrap()
+        };
+
         {
             let ptr = ptr.as_ptr() as *mut u8;
             *ptr = 9;
             assert_eq!(*ptr, 9);
         }
-        a.dealloc(ptr, layout.clone());
+        #[cfg(feature = "allocator_api")]
+        a.deallocate(ptr, layout.clone());
+        #[cfg(not(feature = "allocator_api"))]
+        a.dealloc(ptr.as_ptr(), layout.clone());
 
+        #[cfg(feature = "allocator_api")]
         let ptr = a
-            .alloc(layout.clone())
-            .expect("Should be able to alloc from a second clone");
+            .allocate(layout.clone())
+            .expect("Should be able to alloc from a second clone")
+            .cast::<u8>();
+        #[cfg(not(feature = "allocator_api"))]
+        let ptr = {
+            let p = a.alloc(layout.clone());
+            assert!(!p.is_null());
+            std::ptr::NonNull::new(p).unwrap()
+        };
+
         {
             let ptr = ptr.as_ptr() as *mut u8;
             *ptr = 10;
             assert_eq!(*ptr, 10);
         }
-        a.dealloc(ptr, layout.clone());
+        #[cfg(feature = "allocator_api")]
+        a.deallocate(ptr, layout.clone());
+        #[cfg(not(feature = "allocator_api"))]
+        a.dealloc(ptr.as_ptr(), layout.clone());
     }
 }
 
 #[test]
 fn cannot_alloc_max_usize() {
-    let mut a = &wee_alloc::WeeAlloc::INIT;
+    let a = &wee_alloc_bw::WeeAlloc::INIT;
+    assert!(
+        Layout::from_size_align(std::usize::MAX, 1).is_err(),
+        "modern Rust rejects oversized `Layout`s before allocation"
+    );
+
     unsafe {
-        let layout = Layout::from_size_align(std::usize::MAX, 1)
-            .expect("should be able to create a `Layout` with size = std::usize::MAX");
-        let result = a.alloc(layout);
-        assert!(result.is_err());
+        let layout = Layout::from_size_align(std::isize::MAX as usize, 1)
+            .expect("should be able to create the largest valid `Layout`");
+        #[cfg(feature = "allocator_api")]
+        {
+            let result = a.allocate(layout);
+            assert!(result.is_err());
+        }
+        #[cfg(not(feature = "allocator_api"))]
+        {
+            let result = a.alloc(layout);
+            assert!(result.is_null());
+        }
     }
 }
 
@@ -521,7 +595,7 @@ fn stress() {
     use rand::Rng;
     use std::cmp;
 
-    let mut a = &wee_alloc::WeeAlloc::INIT;
+    let a = &wee_alloc_bw::WeeAlloc::INIT;
     let mut rng = rand::weak_rng();
     let mut ptrs = Vec::new();
     unsafe {
@@ -530,14 +604,17 @@ fn stress() {
                 ptrs.len() > 0 && ((ptrs.len() < 1_000 && rng.gen_weighted_bool(3)) || rng.gen());
             if free {
                 let idx = rng.gen_range(0, ptrs.len());
-                let (ptr, layout): (_, Layout) = ptrs.swap_remove(idx);
-                a.dealloc(ptr, layout);
+                let (ptr, layout): (std::ptr::NonNull<u8>, Layout) = ptrs.swap_remove(idx);
+                #[cfg(feature = "allocator_api")]
+                a.deallocate(ptr, layout);
+                #[cfg(not(feature = "allocator_api"))]
+                a.dealloc(ptr.as_ptr(), layout);
                 continue;
             }
 
             if ptrs.len() > 0 && rng.gen_weighted_bool(100) {
                 let idx = rng.gen_range(0, ptrs.len());
-                let (ptr, old): (_, Layout) = ptrs.swap_remove(idx);
+                let (ptr, old): (std::ptr::NonNull<u8>, Layout) = ptrs.swap_remove(idx);
                 let new = if rng.gen() {
                     Layout::from_size_align(rng.gen_range(old.size(), old.size() * 2), old.align())
                         .unwrap()
@@ -551,11 +628,31 @@ fn stress() {
                 for i in 0..cmp::min(old.size(), new.size()) {
                     tmp.push(*(ptr.as_ptr() as *mut u8).offset(i as isize));
                 }
-                let ptr = a.realloc(ptr, old, new.size()).unwrap();
+
+                // Re-implement realloc for tests if needed or just use alloc + copy + dealloc
+                #[cfg(feature = "allocator_api")]
+                let new_ptr = {
+                    let np = a.allocate(new).unwrap().cast::<u8>();
+                    std::ptr::copy_nonoverlapping(
+                        ptr.as_ptr(),
+                        np.as_ptr(),
+                        cmp::min(old.size(), new.size()),
+                    );
+                    a.deallocate(ptr, old);
+                    np
+                };
+                #[cfg(not(feature = "allocator_api"))]
+                let new_ptr = {
+                    let np = a.realloc(ptr.as_ptr(), old, new.size());
+                    assert!(!np.is_null());
+                    std::ptr::NonNull::new(np).unwrap()
+                };
+
                 for (i, byte) in tmp.iter().enumerate() {
-                    assert_eq!(*byte, *(ptr.as_ptr() as *mut u8).offset(i as isize));
+                    assert_eq!(*byte, *(new_ptr.as_ptr() as *mut u8).offset(i as isize));
                 }
-                ptrs.push((ptr, new));
+                ptrs.push((new_ptr, new));
+                continue;
             }
 
             let size = if rng.gen() {
@@ -568,11 +665,23 @@ fn stress() {
             let zero = rng.gen_weighted_bool(50);
             let layout = Layout::from_size_align(size, align).unwrap();
 
+            #[cfg(feature = "allocator_api")]
             let ptr = if zero {
-                a.alloc_zeroed(layout.clone()).unwrap()
+                a.allocate_zeroed(layout.clone()).unwrap().cast::<u8>()
             } else {
-                a.alloc(layout.clone()).unwrap()
+                a.allocate(layout.clone()).unwrap().cast::<u8>()
             };
+            #[cfg(not(feature = "allocator_api"))]
+            let ptr = {
+                let p = if zero {
+                    a.alloc_zeroed(layout.clone())
+                } else {
+                    a.alloc(layout.clone())
+                };
+                assert!(!p.is_null());
+                std::ptr::NonNull::new(p).unwrap()
+            };
+
             for i in 0..layout.size() {
                 if zero {
                     assert_eq!(*(ptr.as_ptr() as *mut u8).offset(i as isize), 0);

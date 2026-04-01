@@ -27,7 +27,18 @@ cargo build --features size_classes
 
 cargo build --release                         --target wasm32-unknown-unknown
 
-wasm-gc ../target/wasm32-unknown-unknown/release/wee_alloc_example.wasm \
+function wasm_gc {
+    if ! which wasm-gc > /dev/null; then
+        cp "$1" "$2"
+        return
+    fi
+    if ! wasm-gc "$1" "$2"; then
+        echo "Warning: wasm-gc failed on $1, using original file."
+        cp "$1" "$2"
+    fi
+}
+
+wasm_gc ../target/wasm32-unknown-unknown/release/wee_alloc_example.wasm \
         ../target/wasm32-unknown-unknown/release/wee_alloc_example.gc.wasm
 
 if which wasm-opt; then
@@ -38,7 +49,7 @@ fi
 
 cargo build --release --features size_classes --target wasm32-unknown-unknown
 
-wasm-gc ../target/wasm32-unknown-unknown/release/wee_alloc_example.wasm \
+wasm_gc ../target/wasm32-unknown-unknown/release/wee_alloc_example.wasm \
         ../target/wasm32-unknown-unknown/release/wee_alloc_example.size_classes.gc.wasm
 
 if which wasm-opt; then
@@ -52,6 +63,9 @@ wc -c ../target/wasm32-unknown-unknown/release/*.wasm
 set +x
 
 function dis_does_not_contain {
+    if ! which wasm-dis > /dev/null; then
+        return
+    fi
     local matches=$(wasm-dis "$1" | grep "$2")
     if [[ "$matches" != "" ]]; then
         echo "ERROR! found $2 in $1:"

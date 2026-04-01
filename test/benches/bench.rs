@@ -1,7 +1,7 @@
 #![feature(test)]
 
 extern crate test;
-extern crate wee_alloc;
+extern crate wee_alloc_bw;
 extern crate wee_alloc_test;
 
 use std::io;
@@ -32,7 +32,7 @@ macro_rules! bench_trace {
                 println!("{}", operations.lifetime_histogram());
             }
 
-            let a = &wee_alloc::WeeAlloc::INIT;
+            let a = &wee_alloc_bw::WeeAlloc::INIT;
             b.iter(|| {
                 operations.run_with_allocator(a);
             });

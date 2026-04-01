@@ -9,12 +9,13 @@ quickcheck = "0.6.0"
 histo = "0.1.0"
 cfg-if = "0.1.2"
 
-[dependencies.wee_alloc]
+[dependencies.wee_alloc_bw]
 path = "../wee_alloc"
 default-features = false
-features = ["use_std_for_test_debugging", "nightly"]
+features = ["use_std_for_test_debugging"]
 
 [features]
-size_classes = ["wee_alloc/size_classes"]
-extra_assertions = ["wee_alloc/extra_assertions"]
-static_array_backend = ["wee_alloc/static_array_backend"]
+size_classes = ["wee_alloc_bw/size_classes"]
+extra_assertions = ["wee_alloc_bw/extra_assertions"]
+static_array_backend = ["wee_alloc_bw/static_array_backend"]
+allocator_api = ["wee_alloc_bw/nightly"]

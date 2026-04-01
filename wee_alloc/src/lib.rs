@@ -2,45 +2,45 @@
 
 ## About
 
-`wee_alloc`: The **W**asm-**E**nabled, **E**lfin Allocator.
+`wee_alloc_bw`: The **W**asm-**E**nabled, **E**lfin Allocator.
 
 - **Elfin, i.e. small:** Generates less than a kilobyte of uncompressed
   WebAssembly code. Doesn't pull in the heavy panicking or formatting
-  infrastructure. `wee_alloc` won't bloat your `.wasm` download size on the Web.
+  infrastructure. `wee_alloc_bw` won't bloat your `.wasm` download size on the Web.
 
 - **WebAssembly enabled:** Designed for the `wasm32-unknown-unknown` target and
   `#![no_std]`.
 
-`wee_alloc` is focused on targeting WebAssembly, producing a small `.wasm` code
+`wee_alloc_bw` is focused on targeting WebAssembly, producing a small `.wasm` code
 size, and having a simple, correct implementation. It is geared towards code
 that makes a handful of initial dynamically sized allocations, and then performs
 its heavy lifting without any further allocations. This scenario requires *some*
 allocator to exist, but we are more than happy to trade allocation performance
-for small code size. In contrast, `wee_alloc` would be a poor choice for a
+for small code size. In contrast, `wee_alloc_bw` would be a poor choice for a
 scenario where allocation is a performance bottleneck.
 
-Although WebAssembly is the primary target, `wee_alloc` also has an `mmap` based
+Although WebAssembly is the primary target, `wee_alloc_bw` also has an `mmap` based
 implementation for unix systems, a `VirtualAlloc` implementation for Windows,
 and a static array-based backend for OS-independent environments. This enables
-testing `wee_alloc`, and code using `wee_alloc`, without a browser or
+testing `wee_alloc_bw`, and code using `wee_alloc_bw`, without a browser or
 WebAssembly engine.
 
-`wee_alloc` compiles on stable Rust 1.33 and newer.
+`wee_alloc_bw` compiles on stable Rust 1.33 and newer.
 
-- [Using `wee_alloc` as the Global Allocator](#using-wee_alloc-as-the-global-allocator)
+- [Using `wee_alloc_bw` as the Global Allocator](#using-wee_alloc_bw-as-the-global-allocator)
 - [`cargo` Features](#cargo-features)
 - [Implementation Notes and Constraints](#implementation-notes-and-constraints)
 - [License](#license)
 - [Contribution](#contribution)
 
-## Using `wee_alloc` as the Global Allocator
+## Using `wee_alloc_bw` as the Global Allocator
 
 ```
-extern crate wee_alloc;
+extern crate wee_alloc_bw;
 
-// Use `wee_alloc` as the global allocator.
+// Use `wee_alloc_bw` as the global allocator.
 #[global_allocator]
-static ALLOC: wee_alloc::WeeAlloc = wee_alloc::WeeAlloc::INIT;
+static ALLOC: wee_alloc_bw::WeeAlloc = wee_alloc_bw::WeeAlloc::INIT;
 # fn main() {}
 ```
 
@@ -52,7 +52,7 @@ static ALLOC: wee_alloc::WeeAlloc = wee_alloc::WeeAlloc::INIT;
 
 - **extra_assertions**: Enable various extra, expensive integrity assertions and
   defensive mechanisms, such as poisoning freed memory. This incurs a large
-  runtime overhead. It is useful when debugging a use-after-free or `wee_alloc`
+  runtime overhead. It is useful when debugging a use-after-free or `wee_alloc_bw`
   itself.
 
 - **static_array_backend**: Force the use of an OS-independent backing
@@ -69,18 +69,18 @@ static ALLOC: wee_alloc::WeeAlloc = wee_alloc::WeeAlloc::INIT;
 
 ## Implementation Notes and Constraints
 
-- `wee_alloc` imposes two words of overhead on each allocation for maintaining
+- `wee_alloc_bw` imposes two words of overhead on each allocation for maintaining
   its internal free lists.
 
 - Deallocation is an *O(1)* operation.
 
-- `wee_alloc` will never return freed pages to the WebAssembly engine /
+- `wee_alloc_bw` will never return freed pages to the WebAssembly engine /
   operating system. Currently, WebAssembly can only grow its heap, and can never
-  shrink it. All allocated pages are indefinitely kept in `wee_alloc`'s internal
+  shrink it. All allocated pages are indefinitely kept in `wee_alloc_bw`'s internal
   free lists for potential future allocations, even when running on unix
   targets.
 
-- `wee_alloc` uses a simple, first-fit free list implementation. This means that
+- `wee_alloc_bw` uses a simple, first-fit free list implementation. This means that
   allocation is an *O(n)* operation.
 
   Using the `size_classes` feature enables extra free lists dedicated to small
@@ -90,7 +90,7 @@ static ALLOC: wee_alloc::WeeAlloc = wee_alloc::WeeAlloc::INIT;
   uses the same first-fit routines that allocating from the main free list does,
   which avoids introducing more code bloat than necessary.
 
-Finally, here is a diagram giving an overview of `wee_alloc`'s implementation:
+Finally, here is a diagram giving an overview of `wee_alloc_bw`'s implementation:
 
 ```text
 +------------------------------------------------------------------------------+
@@ -218,14 +218,50 @@ mod size_classes;
 
 cfg_if! {
     if #[cfg(feature = "nightly")] {
-        use core::alloc::{Alloc, AllocErr};
+        use core::alloc::{AllocError, GlobalAlloc, Layout};
+        /// A type alias for `AllocError` on nightly Rust.
+        pub(crate) type AllocErr = AllocError;
+
+        /// A trait to provide a `new` method for `AllocErr`.
+        pub trait AllocErrExt {
+            /// Create a new `AllocErr`.
+            fn new() -> Self;
+        }
+
+        impl AllocErrExt for AllocError {
+            #[inline]
+            fn new() -> Self {
+                AllocError
+            }
+        }
     } else {
+        #[derive(Copy, Clone, Debug, PartialEq, Eq)]
         pub(crate) struct AllocErr;
+
+        impl AllocErr {
+            #[inline]
+            pub(crate) fn new() -> Self {
+                AllocErr
+            }
+        }
+
+        /// A trait to provide a `new` method for `AllocErr`.
+        pub trait AllocErrExt {
+            /// Create a new `AllocErr`.
+            fn new() -> Self;
+        }
+
+        impl AllocErrExt for AllocErr {
+            #[inline]
+            fn new() -> Self {
+                AllocErr
+            }
+        }
+
+        use core::alloc::{GlobalAlloc, Layout};
     }
 }
-
 use const_init::ConstInit;
-use core::alloc::{GlobalAlloc, Layout};
 use core::cell::Cell;
 use core::cmp;
 use core::marker::Sync;
@@ -856,11 +892,11 @@ where
 
     loop {
         let current_free = previous_free.get();
-        assert_local_cell_invariants(&(*current_free).header);
-
         if current_free.is_null() {
-            return Err(AllocErr);
+            return Err(AllocErr::new());
         }
+
+        assert_local_cell_invariants(&(*current_free).header);
 
         let current_free = Cell::new(current_free);
 
@@ -904,7 +940,7 @@ where
             return Ok(result);
         }
 
-        previous_free.set(&*(*current_free.get()).next_free_raw.get());
+        previous_free.set((*current_free.get()).next_free_raw.get());
     }
 }
 
@@ -1042,7 +1078,7 @@ impl<'a> WeeAlloc<'a> {
             return Ok(NonNull::new_unchecked(align.0 as *mut u8));
         }
 
-        let word_size: Words = checked_round_up_to(size).ok_or(AllocErr)?;
+        let word_size: Words = checked_round_up_to(size).ok_or_else(|| AllocErr::new())?;
 
         self.with_free_list_and_policy_for_size(word_size, align, |head, policy| {
             assert_is_valid_free_list(head.get(), policy);
@@ -1142,15 +1178,18 @@ impl<'a> WeeAlloc<'a> {
 }
 
 #[cfg(feature = "nightly")]
-unsafe impl<'a, 'b> Alloc for &'b WeeAlloc<'a>
+unsafe impl<'a, 'b> core::alloc::Allocator for &'b WeeAlloc<'a>
 where
     'a: 'b,
 {
-    unsafe fn alloc(&mut self, layout: Layout) -> Result<NonNull<u8>, AllocErr> {
-        self.alloc_impl(layout)
+    fn allocate(&self, layout: Layout) -> Result<NonNull<[u8]>, AllocError> {
+        match unsafe { self.alloc_impl(layout) } {
+            Ok(ptr) => Ok(NonNull::slice_from_raw_parts(ptr, layout.size())),
+            Err(_) => Err(AllocError),
+        }
     }
 
-    unsafe fn dealloc(&mut self, ptr: NonNull<u8>, layout: Layout) {
+    unsafe fn deallocate(&self, ptr: NonNull<u8>, layout: Layout) {
         self.dealloc_impl(ptr, layout)
     }
 }
@@ -1159,7 +1198,7 @@ unsafe impl GlobalAlloc for WeeAlloc<'static> {
     unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
         match self.alloc_impl(layout) {
             Ok(ptr) => ptr.as_ptr(),
-            Err(AllocErr) => ptr::null_mut(),
+            Err(_) => ptr::null_mut(),
         }
     }
 

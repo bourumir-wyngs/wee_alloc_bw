@@ -1,0 +1,41 @@
+name: Linux CI
+
+on:
+  push:
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  linux:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust nightly
+        uses: dtolnay/rust-toolchain@nightly
+        with:
+          targets: wasm32-unknown-unknown,i686-pc-windows-gnu
+
+      - name: Cache cargo artifacts
+        uses: Swatinem/rust-cache@v2
+
+      - name: Install cargo-readme
+        run: cargo install --locked cargo-readme --version '^3'
+
+      - name: Install wasm-gc
+        run: cargo install --locked wasm-gc --version '^0.1.6'
+
+      - name: Run cross-target checks
+        run: ./check.sh
+
+      - name: Run build script
+        run: ./build.sh
+
+      - name: Run test script
+        env:
+          WEE_ALLOC_STATIC_ARRAY_BACKEND_BYTES: "536870912"
+        run: ./test.sh

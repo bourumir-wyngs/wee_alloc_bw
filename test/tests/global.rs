@@ -1,13 +1,13 @@
 // Adopted from
 // https://github.com/alexcrichton/dlmalloc-rs/blob/master/tests/global.rs
 
-extern crate wee_alloc;
+extern crate wee_alloc_bw;
 
 use std::collections::HashMap;
 use std::thread;
 
 #[global_allocator]
-static A: wee_alloc::WeeAlloc = wee_alloc::WeeAlloc::INIT;
+static A: wee_alloc_bw::WeeAlloc = wee_alloc_bw::WeeAlloc::INIT;
 
 #[test]
 fn foo() {

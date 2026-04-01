@@ -1,0 +1,36 @@
+name: Wasm CI
+
+on:
+  push:
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  wasm:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+
+      - name: Cache cargo artifacts
+        uses: Swatinem/rust-cache@v2
+
+      - name: Check allocator for wasm target
+        run: cargo check -p wee_alloc_bw --target wasm32-unknown-unknown
+
+      - name: Check allocator with size classes for wasm target
+        run: cargo check -p wee_alloc_bw --target wasm32-unknown-unknown --features size_classes
+
+      - name: Build example for wasm target
+        run: cargo build -p wee_alloc_example --release --target wasm32-unknown-unknown
+
+      - name: Build example with size classes for wasm target
+        run: cargo build -p wee_alloc_example --release --target wasm32-unknown-unknown --features size_classes

@@ -17,9 +17,9 @@ pub(crate) fn alloc_pages(pages: Pages) -> Result<ptr::NonNull<u8>, AllocErr> {
             0,
         );
         if addr == libc::MAP_FAILED {
-            Err(AllocErr)
+            Err(AllocErr::new())
         } else {
-            ptr::NonNull::new(addr as *mut u8).ok_or(AllocErr)
+            ptr::NonNull::new(addr as *mut u8).ok_or_else(|| AllocErr::new())
         }
     }
 }

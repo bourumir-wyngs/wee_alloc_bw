@@ -1,4 +1,4 @@
-//! An example of what using `wee_alloc` as the global allocator in a
+//! An example of what using `wee_alloc_bw` as the global allocator in a
 //! `#![no_std]` crate targeting `wasm32-unknown-unknown` looks like!
 
 // First, some boilerplate and set up //////////////////////////////////////////
@@ -8,38 +8,44 @@
 // Replacing the allocator and using the `alloc` crate are still unstable.
 #![feature(core_intrinsics, lang_items, alloc_error_handler)]
 
-extern crate alloc;
-extern crate wee_alloc;
+#[macro_use]
+extern crate cfg_if;
 
-// Use `wee_alloc` as the global allocator.
+extern crate alloc;
+extern crate wee_alloc_bw;
+
+// Use `wee_alloc_bw` as the global allocator.
 #[global_allocator]
-static ALLOC: wee_alloc::WeeAlloc = wee_alloc::WeeAlloc::INIT;
+static ALLOC: wee_alloc_bw::WeeAlloc = wee_alloc_bw::WeeAlloc::INIT;
 
 // Need to provide a tiny `panic` implementation for `#![no_std]`.
 // This translates into an `unreachable` instruction that will
 // raise a `trap` the WebAssembly execution if we panic at runtime.
-#[panic_handler]
-#[no_mangle]
-pub fn panic(_info: &::core::panic::PanicInfo) -> ! {
-    unsafe {
-        ::core::intrinsics::abort();
-    }
-}
+cfg_if! {
+    if #[cfg(not(any(test, feature = "use_std")))] {
+        #[panic_handler]
+        pub fn panic(_info: &::core::panic::PanicInfo) -> ! {
+            unsafe {
+                ::core::intrinsics::abort();
+            }
+        }
 
-// Need to provide an allocation error handler which just aborts
-// the execution with trap.
-#[alloc_error_handler]
-#[no_mangle]
-pub extern "C" fn oom(_: ::core::alloc::Layout) -> ! {
-    unsafe {
-        ::core::intrinsics::abort();
+        #[alloc_error_handler]
+        pub fn oom(_: ::core::alloc::Layout) -> ! {
+            unsafe {
+                ::core::intrinsics::abort();
+            }
+        }
     }
 }
 
 // Needed for non-wasm targets.
-#[lang = "eh_personality"]
-#[no_mangle]
-pub extern "C" fn eh_personality() {}
+cfg_if! {
+    if #[cfg(all(not(target_arch = "wasm32"), not(any(test, feature = "use_std"))))] {
+        #[lang = "eh_personality"]
+        pub extern "C" fn eh_personality() {}
+    }
+}
 
 // Now, use the allocator via `alloc` types! ///////////////////////////////////
 

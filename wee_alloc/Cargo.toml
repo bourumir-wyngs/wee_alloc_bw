@@ -6,9 +6,9 @@ authors = [
   "Zack Pierce <zachary.pierce@gmail.com>",
 ]
 categories = ["memory-management", "web-programming", "no-std", "wasm", "embedded"]
-description = "wee_alloc: The Wasm-Enabled, Elfin Allocator"
+description = "wee_alloc_bw: The Wasm-Enabled, Elfin Allocator"
 license = "MPL-2.0"
-name = "wee_alloc"
+name = "wee_alloc_bw"
 readme = "../README.md"
 repository = "https://github.com/rustwasm/wee_alloc"
 version = "0.4.5"
