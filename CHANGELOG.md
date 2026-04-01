@@ -3,6 +3,7 @@
 Unreleased
 
 * Fix a large-allocation free-list traversal bug that could leak memory when overlapping large allocations were freed and later reallocated instead of reusing both freed blocks [106](https://github.com/rustwasm/wee_alloc/issues/106)
+* Fix an integer overflow in `LargeAllocPolicy::new_cell_for_free_list` that caused incorrect memory allocation and potential memory leaks when requesting very large sizes (e.g., `usize::MAX - 8`) [#100](https://github.com/rustwasm/wee_alloc/issues/100)
 
 
 ### 1.0.0
