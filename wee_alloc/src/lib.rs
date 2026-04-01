@@ -828,7 +828,11 @@ impl<'a> AllocPolicy<'a> for LargeAllocPolicy {
         // free list with this new cell, make sure that we allocate enough to
         // fulfill the requested alignment, and still have the minimum cell size
         // left over.
-        let size: Bytes = cmp::max(size.into(), (align + Self::MIN_CELL_SIZE) * Words(2));
+        let requested_size: Bytes = size.into();
+        let size: Bytes = cmp::max(
+            requested_size,
+            requested_size + align + size_of::<CellHeader>() + Bytes::from(Self::MIN_CELL_SIZE),
+        );
 
         let pages: Pages = (size + size_of::<CellHeader>()).round_up_to();
         let new_pages = imp::alloc_pages(pages)?;

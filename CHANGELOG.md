@@ -1,3 +1,7 @@
+### 1.0.0
+
+* Fix a large-allocation refill sizing bug that could cause aligned allocations to fail after a successful free-list refill under `--features "extra_assertions size_classes"`, hanging or panicking in `single_allocation_with_size_and_align`.
+
 ### 0.4.5
 
 Released 2019/08/22.
