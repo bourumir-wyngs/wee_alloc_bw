@@ -1271,45 +1271,60 @@ mod tests {
 
     #[test]
     fn test_leak() {
-        let alloc = WeeAlloc::INIT;
-        let start_stats = alloc.stats();
+        let test_cases = [
+            (85196, 80000),
+            (8190, 8191),
+            (8190, 8190),
+            (8192, 8189),
+            (8192, 8188),
+            (8193, 8188),
+            (9193, 7188),
+            (9192, 7188),
+            (14193, 2188),
+            (16281, 100),
+            (16181, 200),
+            (16081, 300),
+        ];
 
-        for _ in 0..1000 {
-            // This leaked when using wee_alloc before the fix
-            let layout_a = Layout::from_size_align(85196, 1).unwrap();
-            let layout_b = Layout::from_size_align(80000, 1).unwrap();
+        for (size_a, size_b) in test_cases {
+            let alloc = WeeAlloc::INIT;
+            let start_stats = alloc.stats();
 
-            unsafe {
-                let a = alloc.alloc_impl(core::hint::black_box(layout_a)).expect("allocation a failed");
-                let b = alloc.alloc_impl(core::hint::black_box(layout_b)).expect("allocation b failed");
-                alloc.dealloc_impl(core::hint::black_box(a), core::hint::black_box(layout_a));
-                alloc.dealloc_impl(core::hint::black_box(b), core::hint::black_box(layout_b));
+            for _ in 0..1000 {
+                let layout_a = Layout::from_size_align(size_a, 1).unwrap();
+                let layout_b = Layout::from_size_align(size_b, 1).unwrap();
+
+                unsafe {
+                    let a = alloc
+                        .alloc_impl(core::hint::black_box(layout_a))
+                        .expect("allocation a failed");
+                    let b = alloc
+                        .alloc_impl(core::hint::black_box(layout_b))
+                        .expect("allocation b failed");
+                    alloc.dealloc_impl(core::hint::black_box(a), core::hint::black_box(layout_a));
+                    alloc.dealloc_impl(core::hint::black_box(b), core::hint::black_box(layout_b));
+                }
             }
+
+            let end_stats = alloc.stats();
+
+            assert!(
+                end_stats.total_free_bytes >= start_stats.total_free_bytes,
+                "Total free bytes should not decrease for sizes ({}, {}). Start: {:?}, End: {:?}",
+                size_a,
+                size_b,
+                start_stats,
+                end_stats
+            );
+
+            assert!(
+                end_stats.free_list_count < start_stats.free_list_count + 10,
+                "Free list count grew too much for sizes ({}, {}), possible leak or fragmentation. Start: {:?}, End: {:?}",
+                size_a,
+                size_b,
+                start_stats,
+                end_stats
+            );
         }
-
-        let end_stats = alloc.stats();
-
-        // If it leaks, the total_free_bytes will NOT return to the original value
-        // or the number of free cells will keep growing.
-        // Actually, in the case of the bug, the free list would have many small cells
-        // instead of merged large cells, or cells would be lost.
-        // The previous test checked for OS memory growth.
-        // Here we can check that total_free_bytes is consistent.
-
-        assert!(
-            end_stats.total_free_bytes >= start_stats.total_free_bytes,
-            "Total free bytes should not decrease. Start: {:?}, End: {:?}",
-            start_stats,
-            end_stats
-        );
-
-        // We allow some growth in free list count if it's due to first-time initialization,
-        // but it should not be huge (1000 iterations would mean 1000+ cells if it leaks).
-        assert!(
-            end_stats.free_list_count < start_stats.free_list_count + 10,
-            "Free list count grew too much, possible leak or fragmentation. Start: {:?}, End: {:?}",
-            start_stats,
-            end_stats
-        );
     }
 }
