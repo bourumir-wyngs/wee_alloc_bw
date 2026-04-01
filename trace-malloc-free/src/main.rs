@@ -1,10 +1,8 @@
 extern crate duct;
-#[macro_use]
-extern crate quicli;
 extern crate regex;
 
-use quicli::prelude::*;
 use regex::Regex;
+use std::env;
 use std::collections::HashMap;
 use std::fs;
 use std::io::{BufWriter, Write};
@@ -13,17 +11,52 @@ use std::path::PathBuf;
 /// Trace the malloc and frees of some program and output the result as something that can be fed as testing/benching input to `wee_alloc`.
 ///
 /// Depends on valgrind being installed.
-#[derive(Debug, StructOpt)]
+#[derive(Debug)]
 struct Cli {
     /// The file path to write the traced output into.
-    #[structopt(short = "o", long = "output", parse(from_os_str))]
     output: PathBuf,
 
     /// The command to spawn and trace its mallocs and frees.
     command: Vec<String>,
 }
 
-main!(|cli: Cli| {
+impl Cli {
+    fn parse() -> Result<Self, Box<dyn std::error::Error>> {
+        let mut args = env::args_os().skip(1);
+        let mut output = None;
+        let mut command = Vec::new();
+
+        while let Some(arg) = args.next() {
+            if command.is_empty() {
+                if arg == "-o" || arg == "--output" {
+                    output = Some(PathBuf::from(args.next().ok_or("missing value for --output")?));
+                    continue;
+                }
+
+                if arg == "--" {
+                    command.extend(args.map(|arg| arg.into_string().map_err(|_| "non-utf8 argument"))
+                        .collect::<Result<Vec<_>, _>>()?);
+                    break;
+                }
+            }
+
+            command.push(arg.into_string().map_err(|_| "non-utf8 argument")?);
+            command.extend(args.map(|arg| arg.into_string().map_err(|_| "non-utf8 argument"))
+                .collect::<Result<Vec<_>, _>>()?);
+            break;
+        }
+
+        let output = output.ok_or("missing required --output <path>")?;
+        if command.is_empty() {
+            return Err("missing command to trace".into());
+        }
+
+        Ok(Cli { output, command })
+    }
+}
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let cli = Cli::parse()?;
     let mut output = BufWriter::new(fs::File::create(&cli.output)?);
 
     let mut args = vec![
@@ -122,4 +155,5 @@ main!(|cli: Cli| {
             continue;
         }
     }
-});
+    Ok(())
+}

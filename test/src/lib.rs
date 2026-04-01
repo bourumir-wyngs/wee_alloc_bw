@@ -9,6 +9,9 @@ extern crate rand;
 extern crate wee_alloc_bw;
 
 use quickcheck::{Arbitrary, Gen};
+use rand::Rng;
+use rand::RngExt;
+use rand::SeedableRng;
 #[cfg(feature = "allocator_api")]
 use std::alloc::Allocator;
 #[cfg(not(feature = "allocator_api"))]
@@ -35,8 +38,8 @@ pub use Operation::*;
 
 impl Operation {
     #[inline]
-    fn arbitrary_alloc<G: Gen>(
-        g: &mut G,
+    fn arbitrary_alloc<R: Rng + ?Sized>(
+        g: &mut R,
         active_allocs: &mut Vec<usize>,
         num_allocs: &mut usize,
     ) -> Self {
@@ -44,7 +47,7 @@ impl Operation {
         *num_allocs += 1;
 
         // Zero sized allocation 1/1000 times.
-        if g.gen_weighted_bool(1000) {
+        if g.random_ratio(1, 1000) {
             return Alloc(0);
         }
 
@@ -54,24 +57,24 @@ impl Operation {
         let max_small_alloc_size = (NUM_SIZE_CLASSES + 1) * mem::size_of::<usize>();
 
         // Do a large allocation with probability P = 1/20.
-        if g.gen_weighted_bool(20) {
-            let n =
-                g.gen_range(1, 10) * max_small_alloc_size + g.gen_range(0, max_small_alloc_size);
+        if g.random_ratio(1, 20) {
+            let n = g.random_range(1..10) * max_small_alloc_size
+                + g.random_range(0..max_small_alloc_size);
             return Alloc(n);
         }
 
         // Small allocation.
-        if g.gen() {
-            Alloc(g.gen_range(12, 17))
+        if g.random() {
+            Alloc(g.random_range(12..17))
         } else {
             Alloc(max_small_alloc_size)
         }
     }
 
     #[inline]
-    fn arbitrary_free<G: Gen>(g: &mut G, active_allocs: &mut Vec<usize>) -> Self {
+    fn arbitrary_free<R: Rng + ?Sized>(g: &mut R, active_allocs: &mut Vec<usize>) -> Self {
         assert!(!active_allocs.is_empty());
-        let i = g.gen_range(0, active_allocs.len());
+        let i = g.random_range(0..active_allocs.len());
         Free(active_allocs.swap_remove(i))
     }
 }
@@ -121,16 +124,11 @@ const NUM_OPERATIONS: usize = 50_000;
 
 impl Arbitrary for Operations {
     #[inline(never)]
-    fn arbitrary<G: Gen>(g: &mut G) -> Self {
-        use quickcheck::Rng;
-        use rand::SeedableRng;
-
+    fn arbitrary(g: &mut Gen) -> Self {
         // Our tests are spending more time in the RNG under this `Arbitrary`
         // implementation than in the allocator. Speed things up a little bit
         // with this RNG.
-        let mut x = rand::XorShiftRng::new_unseeded();
-        x.reseed(g.gen());
-        let mut g = quickcheck::StdGen::new(x, 129);
+        let mut g = rand::rngs::StdRng::from_seed(<[u8; 32]>::arbitrary(g));
         let g = &mut g;
 
         let mut num_allocs = 0;
@@ -141,7 +139,7 @@ impl Arbitrary for Operations {
             // Free with P = 1/4 so that we exercise more free list
             // refilling code paths due to the higher rates of
             // allocation.
-            if !active_allocs.is_empty() && g.gen_weighted_bool(4) {
+            if !active_allocs.is_empty() && g.random_ratio(1, 4) {
                 operations.push(Operation::arbitrary_free(g, &mut active_allocs));
             } else {
                 operations.push(Operation::arbitrary_alloc(
@@ -591,18 +589,17 @@ fn cannot_alloc_max_usize() {
 #[test]
 #[cfg(not(any(feature = "extra_assertions", feature = "static_array_backend")))]
 fn stress() {
-    use rand::Rng;
     use std::cmp;
 
     let a = &wee_alloc_bw::WeeAlloc::INIT;
-    let mut rng = rand::weak_rng();
+    let mut rng = rand::rng();
     let mut ptrs = Vec::new();
     unsafe {
         for _ in 0..100_000 {
-            let free =
-                ptrs.len() > 0 && ((ptrs.len() < 1_000 && rng.gen_weighted_bool(3)) || rng.gen());
+            let free = ptrs.len() > 0
+                && ((ptrs.len() < 1_000 && rng.random_ratio(1, 3)) || rng.random());
             if free {
-                let idx = rng.gen_range(0, ptrs.len());
+                let idx = rng.random_range(0..ptrs.len());
                 let (ptr, layout): (std::ptr::NonNull<u8>, Layout) = ptrs.swap_remove(idx);
                 #[cfg(feature = "allocator_api")]
                 a.deallocate(ptr, layout);
@@ -611,14 +608,20 @@ fn stress() {
                 continue;
             }
 
-            if ptrs.len() > 0 && rng.gen_weighted_bool(100) {
-                let idx = rng.gen_range(0, ptrs.len());
+            if ptrs.len() > 0 && rng.random_ratio(1, 100) {
+                let idx = rng.random_range(0..ptrs.len());
                 let (ptr, old): (std::ptr::NonNull<u8>, Layout) = ptrs.swap_remove(idx);
-                let new = if rng.gen() {
-                    Layout::from_size_align(rng.gen_range(old.size(), old.size() * 2), old.align())
+                let new = if rng.random() {
+                    Layout::from_size_align(
+                        rng.random_range(old.size()..old.size() * 2),
+                        old.align(),
+                    )
                         .unwrap()
                 } else if old.size() > 10 {
-                    Layout::from_size_align(rng.gen_range(old.size() / 2, old.size()), old.align())
+                    Layout::from_size_align(
+                        rng.random_range(old.size() / 2..old.size()),
+                        old.align(),
+                    )
                         .unwrap()
                 } else {
                     continue;
@@ -654,14 +657,14 @@ fn stress() {
                 continue;
             }
 
-            let size = if rng.gen() {
-                rng.gen_range(1, 128)
+            let size = if rng.random() {
+                rng.random_range(1..128)
             } else {
-                rng.gen_range(1, 128 * 1024)
+                rng.random_range(1..128 * 1024)
             };
-            let align = 1 << rng.gen_range(0, 3);
+            let align = 1 << rng.random_range(0..3);
 
-            let zero = rng.gen_weighted_bool(50);
+            let zero = rng.random_ratio(1, 50);
             let layout = Layout::from_size_align(size, align).unwrap();
 
             #[cfg(feature = "allocator_api")]
