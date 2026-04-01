@@ -1318,6 +1318,42 @@ mod tests {
     use super::*;
 
     #[test]
+    fn test_merge_free_left_free_right_then_free_middle() {
+        let alloc = WeeAlloc::INIT;
+        let layout = Layout::from_size_align(100, 1).unwrap();
+
+        unsafe {
+            let left = alloc.alloc_impl(layout).unwrap();
+            let middle = alloc.alloc_impl(layout).unwrap();
+            let right = alloc.alloc_impl(layout).unwrap();
+
+            alloc.dealloc_impl(left, layout);
+            alloc.dealloc_impl(right, layout);
+            alloc.dealloc_impl(middle, layout);
+
+            let stats = alloc.stats();
+            assert_eq!(stats.free_list_count, 1);
+        }
+    }
+
+    #[test]
+    fn test_merge_free_right_then_free_left() {
+        let alloc = WeeAlloc::INIT;
+        let layout = Layout::from_size_align(100, 1).unwrap();
+
+        unsafe {
+            let left = alloc.alloc_impl(layout).unwrap();
+            let right = alloc.alloc_impl(layout).unwrap();
+
+            alloc.dealloc_impl(right, layout);
+            alloc.dealloc_impl(left, layout);
+
+            let stats = alloc.stats();
+            assert_eq!(stats.free_list_count, 1);
+        }
+    }
+
+    #[test]
     fn test_leak() {
         let test_cases = [
             (85196, 80000),
