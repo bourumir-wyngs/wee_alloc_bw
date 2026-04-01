@@ -5,5 +5,5 @@ pub(crate) trait ConstInit {
 }
 
 impl<T> ConstInit for *const T {
-    const INIT: Self = 0 as *mut _;
+    const INIT: Self = core::ptr::null();
 }

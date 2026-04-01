@@ -1,4 +1,4 @@
-use super::AllocErr;
+use super::{AllocErr, AllocErrExt};
 use const_init::ConstInit;
 #[cfg(feature = "extra_assertions")]
 use core::cell::Cell;
@@ -19,14 +19,15 @@ static mut OFFSET: Mutex<usize> = Mutex::new(0);
 
 pub(crate) unsafe fn alloc_pages(pages: Pages) -> Result<NonNull<u8>, AllocErr> {
     let bytes: Bytes = pages.into();
+    #[allow(static_mut_refs)]
     let mut offset = OFFSET.lock();
-    let end = bytes.0.checked_add(*offset).ok_or(AllocErr)?;
+    let end = bytes.0.checked_add(*offset).ok_or_else(AllocErr::new)?;
     if end < SCRATCH_LEN_BYTES {
-        let ptr = SCRATCH_HEAP.0[*offset..end].as_mut_ptr() as *mut u8;
+        let ptr = SCRATCH_HEAP.0[*offset..end].as_mut_ptr();
         *offset = end;
-        NonNull::new(ptr).ok_or_else(|| AllocErr)
+        NonNull::new(ptr).ok_or_else(AllocErr::new)
     } else {
-        Err(AllocErr)
+        Err(AllocErr::new())
     }
 }
 
@@ -75,7 +76,7 @@ impl<T> Exclusive<T> {
     // XXX: If we don't mark this function inline, then it won't be, and the
     // code size also blows up by about 200 bytes.
     #[inline]
-    pub(crate) unsafe fn with_exclusive_access<'a, F, U>(&'a self, f: F) -> U
+    pub(crate) unsafe fn with_exclusive_access<F, U>(&self, f: F) -> U
     where
         for<'x> F: FnOnce(&'x mut T) -> U,
     {

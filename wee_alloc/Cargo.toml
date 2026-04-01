@@ -1,16 +1,18 @@
 [package]
 authors = [
-  "Nick Fitzgerald <fitzgen@gmail.com>",
-  "Sergey Pepyakin <s.pepyakin@gmail.com>",
-  "Matt Howell <mjhowell@gmail.com>",
-  "Zack Pierce <zachary.pierce@gmail.com>",
+  # Provided versions up to 1.0.0 exclusive.
+  #"Nick Fitzgerald <fitzgen@gmail.com>",
+  #"Sergey Pepyakin <s.pepyakin@gmail.com>",
+  #"Matt Howell <mjhowell@gmail.com>",
+  #"Zack Pierce <zachary.pierce@gmail.com>",
+  "Audrius Meskauskas <audrius.meskauskas@gmail.com"
 ]
 categories = ["memory-management", "web-programming", "no-std", "wasm", "embedded"]
 description = "wee_alloc_bw: The Wasm-Enabled, Elfin Allocator"
 license = "MPL-2.0"
 name = "wee_alloc_bw"
 readme = "../README.md"
-repository = "https://github.com/rustwasm/wee_alloc"
+repository = "https://github.com/bourumir-wyngs/wee_alloc_bw"
 version = "1.0.0"
 
 [badges]

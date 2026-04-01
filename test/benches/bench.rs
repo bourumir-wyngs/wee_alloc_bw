@@ -4,33 +4,25 @@ extern crate test;
 extern crate wee_alloc_bw;
 extern crate wee_alloc_test;
 
-use std::io;
-use wee_alloc_test::*;
-
 macro_rules! bench_trace {
     ($name:ident, $trace:expr) => {
         #[bench]
         #[cfg(not(feature = "extra_assertions"))]
         fn $name(b: &mut test::Bencher) {
-            let operations = Operations::read_trace($trace);
+            let operations = wee_alloc_test::Operations::read_trace($trace);
 
-            {
-                let stdout = io::stdout();
-                let _stdout = stdout.lock();
-
-                println!(
-                    "################## {} ##################",
-                    stringify!($name)
-                );
-                println!("#");
-                println!("# Allocations by log2(Size)");
-                println!("#");
-                println!("{}", operations.size_histogram());
-                println!("#");
-                println!("# Allocations by Lifetime");
-                println!("#");
-                println!("{}", operations.lifetime_histogram());
-            }
+            println!(
+                "################## {} ##################",
+                stringify!($name)
+            );
+            println!("#");
+            println!("# Allocations by log2(Size)");
+            println!("#");
+            println!("{}", operations.size_histogram());
+            println!("#");
+            println!("# Allocations by Lifetime");
+            println!("#");
+            println!("{}", operations.lifetime_histogram());
 
             let a = &wee_alloc_bw::WeeAlloc::INIT;
             b.iter(|| {

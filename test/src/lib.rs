@@ -9,11 +9,11 @@ extern crate rand;
 extern crate wee_alloc_bw;
 
 use quickcheck::{Arbitrary, Gen};
-use std::alloc::Layout;
-#[cfg(not(feature = "allocator_api"))]
-use std::alloc::GlobalAlloc;
 #[cfg(feature = "allocator_api")]
 use std::alloc::Allocator;
+#[cfg(not(feature = "allocator_api"))]
+use std::alloc::GlobalAlloc;
+use std::alloc::Layout;
 use std::f64;
 use std::fs;
 use std::io::Read;
@@ -251,10 +251,9 @@ impl Arbitrary for Operations {
 
 impl Operations {
     pub fn run_single_threaded(&self) {
-        #[cfg(feature = "allocator_api")]
-        self.run_with_allocator(&wee_alloc_bw::WeeAlloc::INIT);
-        #[cfg(not(feature = "allocator_api"))]
-        self.run_with_allocator(&wee_alloc_bw::WeeAlloc::INIT);
+        static WEE: wee_alloc_bw::WeeAlloc = wee_alloc_bw::WeeAlloc::INIT;
+
+        self.run_with_allocator(&WEE);
     }
 
     pub fn run_multi_threaded(ops0: Self, ops1: Self, ops2: Self, ops3: Self) {
@@ -274,14 +273,13 @@ impl Operations {
     }
 
     #[cfg(feature = "allocator_api")]
-    pub fn run_with_allocator<A: Allocator>(&self, mut a: A) {
-        use std::ptr::NonNull;
+    pub fn run_with_allocator<A: Allocator>(&self, a: A) {
         let mut allocs = vec![];
         for op in self.0.iter().cloned() {
             match op {
                 Alloc(n) => {
                     let layout = Layout::from_size_align(n, mem::size_of::<usize>()).unwrap();
-                    allocs.push(match a.allocate(layout.clone()) {
+                    allocs.push(match a.allocate(layout) {
                         Ok(ptr) => Some((ptr.cast::<u8>(), layout)),
                         Err(_) => None,
                     });
@@ -411,9 +409,12 @@ quickcheck! {
         let size = size % 65536;
         let align = ALIGNS[align % ALIGNS.len()];
 
-        let mut w = &wee_alloc_bw::WeeAlloc::INIT;
+        static WEE: wee_alloc_bw::WeeAlloc = wee_alloc_bw::WeeAlloc::INIT;
         let layout = Layout::from_size_align(size, align).unwrap();
-        let _ = unsafe { w.alloc(layout) };
+        #[cfg(feature = "allocator_api")]
+        let _ = (&WEE).allocate(layout);
+        #[cfg(not(feature = "allocator_api"))]
+        let _ = unsafe { WEE.alloc(layout) };
     }
 }
 
@@ -466,11 +467,9 @@ fn regression_test_3() {
 
 #[test]
 fn allocate_size_zero() {
-    use std::iter;
     Operations(
-        iter::repeat(Alloc(0))
-            .take(1000)
-            .chain((0..1000).map(|i| Free(i)))
+        std::iter::repeat_n(Alloc(0), 1000)
+            .chain((0..1000).map(Free))
             .collect(),
     )
     .run_single_threaded();
@@ -478,13 +477,13 @@ fn allocate_size_zero() {
 
 #[test]
 fn allocate_many_small() {
-    use std::iter;
-
     Operations(
-        iter::repeat(Alloc(16 * mem::size_of::<usize>()))
-            .take(100)
-            .chain((0..100).map(|i| Free(i)))
-            .chain(iter::repeat(Alloc(256 * mem::size_of::<usize>())).take(100))
+        std::iter::repeat_n(Alloc(16 * mem::size_of::<usize>()), 100)
+            .chain((0..100).map(Free))
+            .chain(std::iter::repeat_n(
+                Alloc(256 * mem::size_of::<usize>()),
+                100,
+            ))
             .chain((0..100).map(|i| Free(i + 100)))
             .collect(),
     )
@@ -493,13 +492,13 @@ fn allocate_many_small() {
 
 #[test]
 fn allocate_many_large() {
-    use std::iter;
-
     Operations(
-        iter::repeat(Alloc(257 * mem::size_of::<usize>()))
-            .take(100)
-            .chain((0..100).map(|i| Free(i)))
-            .chain(iter::repeat(Alloc(1024 * mem::size_of::<usize>())).take(100))
+        std::iter::repeat_n(Alloc(257 * mem::size_of::<usize>()), 100)
+            .chain((0..100).map(Free))
+            .chain(std::iter::repeat_n(
+                Alloc(1024 * mem::size_of::<usize>()),
+                100,
+            ))
             .chain((0..100).map(|i| Free(i + 100)))
             .collect(),
     )
@@ -514,76 +513,76 @@ fn allocate_many_large() {
 
 #[test]
 fn smoke() {
-    let a = &wee_alloc_bw::WeeAlloc::INIT;
+    static WEE: wee_alloc_bw::WeeAlloc = wee_alloc_bw::WeeAlloc::INIT;
+    let a = &WEE;
     unsafe {
         let layout = Layout::new::<u8>();
         #[cfg(feature = "allocator_api")]
         let ptr = a
-            .allocate(layout.clone())
+            .allocate(layout)
             .expect("Should be able to alloc a fresh Layout clone")
             .cast::<u8>();
         #[cfg(not(feature = "allocator_api"))]
         let ptr = {
-            let p = a.alloc(layout.clone());
+            let p = a.alloc(layout);
             assert!(!p.is_null());
             std::ptr::NonNull::new(p).unwrap()
         };
 
         {
-            let ptr = ptr.as_ptr() as *mut u8;
+            let ptr = ptr.as_ptr();
             *ptr = 9;
             assert_eq!(*ptr, 9);
         }
         #[cfg(feature = "allocator_api")]
-        a.deallocate(ptr, layout.clone());
+        a.deallocate(ptr, layout);
         #[cfg(not(feature = "allocator_api"))]
-        a.dealloc(ptr.as_ptr(), layout.clone());
+        a.dealloc(ptr.as_ptr(), layout);
 
         #[cfg(feature = "allocator_api")]
         let ptr = a
-            .allocate(layout.clone())
+            .allocate(layout)
             .expect("Should be able to alloc from a second clone")
             .cast::<u8>();
         #[cfg(not(feature = "allocator_api"))]
         let ptr = {
-            let p = a.alloc(layout.clone());
+            let p = a.alloc(layout);
             assert!(!p.is_null());
             std::ptr::NonNull::new(p).unwrap()
         };
 
         {
-            let ptr = ptr.as_ptr() as *mut u8;
+            let ptr = ptr.as_ptr();
             *ptr = 10;
             assert_eq!(*ptr, 10);
         }
         #[cfg(feature = "allocator_api")]
-        a.deallocate(ptr, layout.clone());
+        a.deallocate(ptr, layout);
         #[cfg(not(feature = "allocator_api"))]
-        a.dealloc(ptr.as_ptr(), layout.clone());
+        a.dealloc(ptr.as_ptr(), layout);
     }
 }
 
 #[test]
 fn cannot_alloc_max_usize() {
-    let a = &wee_alloc_bw::WeeAlloc::INIT;
+    static WEE: wee_alloc_bw::WeeAlloc = wee_alloc_bw::WeeAlloc::INIT;
+    let a = &WEE;
     assert!(
-        Layout::from_size_align(std::usize::MAX, 1).is_err(),
+        Layout::from_size_align(usize::MAX, 1).is_err(),
         "modern Rust rejects oversized `Layout`s before allocation"
     );
 
+    let layout = Layout::from_size_align(isize::MAX as usize, 1)
+        .expect("should be able to create the largest valid `Layout`");
+    #[cfg(feature = "allocator_api")]
+    {
+        let result = a.allocate(layout);
+        assert!(result.is_err());
+    }
+    #[cfg(not(feature = "allocator_api"))]
     unsafe {
-        let layout = Layout::from_size_align(std::isize::MAX as usize, 1)
-            .expect("should be able to create the largest valid `Layout`");
-        #[cfg(feature = "allocator_api")]
-        {
-            let result = a.allocate(layout);
-            assert!(result.is_err());
-        }
-        #[cfg(not(feature = "allocator_api"))]
-        {
-            let result = a.alloc(layout);
-            assert!(result.is_null());
-        }
+        let result = a.alloc(layout);
+        assert!(result.is_null());
     }
 }
 

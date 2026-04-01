@@ -1,6 +1,6 @@
-use super::{assert_is_word_aligned, PAGE_SIZE, unchecked_unwrap};
-use const_init::ConstInit;
 use super::AllocErr;
+use super::{assert_is_word_aligned, unchecked_unwrap, PAGE_SIZE};
+use const_init::ConstInit;
 use core::arch::wasm32;
 use core::cell::UnsafeCell;
 use core::ptr::NonNull;

@@ -171,7 +171,7 @@ for hacking!
 
 #![deny(missing_docs)]
 #![cfg_attr(not(feature = "use_std_for_test_debugging"), no_std)]
-#![cfg_attr(feature = "nightly", feature(allocator_api, core_intrinsics))]
+#![cfg_attr(feature = "nightly", feature(allocator_api))]
 
 #[macro_use]
 extern crate cfg_if;
@@ -298,7 +298,7 @@ where
     Bytes: RoundUpTo<T>,
 {
     if b.0.checked_add(T::BYTE_SIZE.0).is_none() {
-        return None;
+        None
     } else {
         Some(b.round_up_to())
     }
@@ -465,7 +465,7 @@ impl<'a> CellHeader<'a> {
 
     fn as_free_cell(&self) -> Option<&FreeCell<'a>> {
         if self.is_free() {
-            Some(unsafe { mem::transmute(self) })
+            Some(unsafe { mem::transmute::<&CellHeader<'a>, &FreeCell<'a>>(self) })
         } else {
             None
         }
@@ -530,7 +530,7 @@ impl<'a> FreeCell<'a> {
         next_free: Option<*const FreeCell<'a>>,
         policy: &dyn AllocPolicy<'a>,
     ) -> *const FreeCell<'a> {
-        assert_is_word_aligned(raw.as_ptr() as *mut u8);
+        assert_is_word_aligned(raw.as_ptr());
 
         let next_free = next_free.unwrap_or(ptr::null_mut());
 
@@ -548,6 +548,7 @@ impl<'a> FreeCell<'a> {
         raw
     }
 
+    #[allow(clippy::wrong_self_convention)]
     fn into_allocated_cell(&self, policy: &dyn AllocPolicy<'a>) -> &AllocatedCell<'a> {
         assert_local_cell_invariants(&self.header);
         assert_is_poisoned_with_free_pattern(self, policy);
@@ -636,7 +637,7 @@ impl<'a> FreeCell<'a> {
 
     #[cfg(feature = "extra_assertions")]
     fn tail_data(&self) -> *const u8 {
-        let data = unsafe { (self as *const FreeCell as *const FreeCell).offset(1) as *const u8 };
+        let data = unsafe { (self as *const FreeCell).offset(1) as *const u8 };
         assert_is_word_aligned(data);
         data
     }
@@ -651,6 +652,7 @@ impl<'a> FreeCell<'a> {
 }
 
 impl<'a> AllocatedCell<'a> {
+    #[allow(clippy::wrong_self_convention)]
     unsafe fn into_free_cell(&self, policy: &dyn AllocPolicy<'a>) -> &FreeCell<'a> {
         assert_local_cell_invariants(&self.header);
 
@@ -965,10 +967,10 @@ unsafe fn alloc_first_fit<'a>(
     })
 }
 
-unsafe fn alloc_with_refill<'a, 'b>(
+unsafe fn alloc_with_refill<'a>(
     size: Words,
     align: Bytes,
-    head: &'b Cell<*const FreeCell<'a>>,
+    head: &Cell<*const FreeCell<'a>>,
     policy: &dyn AllocPolicy<'a>,
 ) -> Result<NonNull<u8>, AllocErr> {
     if let Ok(result) = alloc_first_fit(size, align, head, policy) {
@@ -1016,6 +1018,7 @@ impl<'a> WeeAlloc<'a> {
     ///
     /// This is usable for initializing `static`s that get set as the global
     /// allocator.
+    #[allow(clippy::declare_interior_mutable_const)]
     pub const INIT: Self = <Self as ConstInit>::INIT;
 
     #[cfg(feature = "size_classes")]
@@ -1078,7 +1081,7 @@ impl<'a> WeeAlloc<'a> {
             return Ok(NonNull::new_unchecked(align.0 as *mut u8));
         }
 
-        let word_size: Words = checked_round_up_to(size).ok_or_else(|| AllocErr::new())?;
+        let word_size: Words = checked_round_up_to(size).ok_or_else(AllocErr::new)?;
 
         self.with_free_list_and_policy_for_size(word_size, align, |head, policy| {
             assert_is_valid_free_list(head.get(), policy);
