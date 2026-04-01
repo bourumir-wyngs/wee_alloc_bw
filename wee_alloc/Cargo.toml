@@ -5,6 +5,7 @@ authors = [
   #"Sergey Pepyakin <s.pepyakin@gmail.com>",
   #"Matt Howell <mjhowell@gmail.com>",
   #"Zack Pierce <zachary.pierce@gmail.com>",
+
   "Audrius Meskauskas <audrius.meskauskas@gmail.com"
 ]
 categories = ["memory-management", "web-programming", "no-std", "wasm", "embedded"]
