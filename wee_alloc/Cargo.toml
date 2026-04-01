@@ -43,6 +43,7 @@ cfg-if = "1.0.4"
 version = "0.10"
 optional = true
 default-features = false
+features = ["mutex", "spin_mutex"]
 
 [target.'cfg(all(unix, not(target_arch = "wasm32")))'.dependencies.libc]
 default-features = false

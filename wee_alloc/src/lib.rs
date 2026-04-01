@@ -1006,7 +1006,7 @@ unsafe impl<'a> Sync for WeeAlloc<'a> {}
 
 impl<'a> ConstInit for WeeAlloc<'a> {
     const INIT: WeeAlloc<'a> = WeeAlloc {
-        head: imp::Exclusive::INIT,
+        head: <imp::Exclusive<*const FreeCell<'a>> as ConstInit>::INIT,
 
         #[cfg(feature = "size_classes")]
         size_classes: size_classes::SizeClasses::INIT,
