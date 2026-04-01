@@ -999,6 +999,17 @@ unsafe fn alloc_with_refill<'a>(
     result
 }
 
+/// Statistics about the allocator's internal state.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct AllocStats {
+    /// The number of cells in the main free list.
+    pub free_list_count: usize,
+    /// The total number of bytes in all free lists.
+    pub total_free_bytes: usize,
+    /// The number of cells in the size class free lists.
+    pub size_class_free_list_count: usize,
+}
+
 /// A wee allocator.
 ///
 /// # Safety
@@ -1024,6 +1035,38 @@ impl<'a> ConstInit for WeeAlloc<'a> {
 }
 
 impl<'a> WeeAlloc<'a> {
+    /// Returns statistics about the allocator's internal state.
+    pub fn stats(&self) -> AllocStats {
+        let mut stats = AllocStats::default();
+        unsafe {
+            self.head.with_exclusive_access(|head| {
+                let mut current = *head;
+                while !current.is_null() {
+                    stats.free_list_count += 1;
+                    stats.total_free_bytes += (*current).header.size().0;
+                    current = (*current).next_free();
+                }
+            });
+
+            #[cfg(feature = "size_classes")]
+            {
+                for i in 1..=size_classes::SizeClasses::NUM_SIZE_CLASSES {
+                    if let Some(head) = self.size_classes.get(Words(i)) {
+                        head.with_exclusive_access(|head| {
+                            let mut current = *head;
+                            while !current.is_null() {
+                                stats.size_class_free_list_count += 1;
+                                stats.total_free_bytes += (*current).header.size().0;
+                                current = (*current).next_free();
+                            }
+                        });
+                    }
+                }
+            }
+        }
+        stats
+    }
+
     /// An initial `const` default construction of a `WeeAlloc` allocator.
     ///
     /// This is usable for initializing `static`s that get set as the global
@@ -1219,5 +1262,54 @@ unsafe impl GlobalAlloc for WeeAlloc<'static> {
         if let Some(ptr) = NonNull::new(ptr) {
             self.dealloc_impl(ptr, layout);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_leak() {
+        let alloc = WeeAlloc::INIT;
+        let start_stats = alloc.stats();
+
+        for _ in 0..1000 {
+            // This leaked when using wee_alloc before the fix
+            let layout_a = Layout::from_size_align(85196, 1).unwrap();
+            let layout_b = Layout::from_size_align(80000, 1).unwrap();
+
+            unsafe {
+                let a = alloc.alloc_impl(core::hint::black_box(layout_a)).expect("allocation a failed");
+                let b = alloc.alloc_impl(core::hint::black_box(layout_b)).expect("allocation b failed");
+                alloc.dealloc_impl(core::hint::black_box(a), core::hint::black_box(layout_a));
+                alloc.dealloc_impl(core::hint::black_box(b), core::hint::black_box(layout_b));
+            }
+        }
+
+        let end_stats = alloc.stats();
+
+        // If it leaks, the total_free_bytes will NOT return to the original value
+        // or the number of free cells will keep growing.
+        // Actually, in the case of the bug, the free list would have many small cells
+        // instead of merged large cells, or cells would be lost.
+        // The previous test checked for OS memory growth.
+        // Here we can check that total_free_bytes is consistent.
+
+        assert!(
+            end_stats.total_free_bytes >= start_stats.total_free_bytes,
+            "Total free bytes should not decrease. Start: {:?}, End: {:?}",
+            start_stats,
+            end_stats
+        );
+
+        // We allow some growth in free list count if it's due to first-time initialization,
+        // but it should not be huge (1000 iterations would mean 1000+ cells if it leaks).
+        assert!(
+            end_stats.free_list_count < start_stats.free_list_count + 10,
+            "Free list count grew too much, possible leak or fragmentation. Start: {:?}, End: {:?}",
+            start_stats,
+            end_stats
+        );
     }
 }
