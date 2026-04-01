@@ -92,7 +92,7 @@ static ALLOC: wee_alloc_bw::WeeAlloc = wee_alloc_bw::WeeAlloc::INIT;
 - `wee_alloc_bw` imposes two words of overhead on each allocation for maintaining
   its internal free lists.
 
-- Deallocation is an *O(1)* operation.
+- Deallocation is an *O(1)* operation if neither neighbor is free, or only the left neighbor is free. It is *O(n)* if the right neighbor is free.
 
 - `wee_alloc_bw` will never return freed pages to the WebAssembly engine /
   operating system. Currently, WebAssembly can only grow its heap, and can never
