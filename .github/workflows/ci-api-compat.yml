@@ -1,0 +1,33 @@
+name: API Compatibility CI
+
+on:
+  push:
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  api-compat:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Fetch git tags
+        run: git fetch --force --tags origin
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo artifacts
+        uses: Swatinem/rust-cache@v2
+
+      - name: Install cargo-semver-checks
+        run: cargo install --locked cargo-semver-checks
+
+      - name: Check public API compatibility against tag 1.0.0
+        run: cargo semver-checks --manifest-path wee_alloc/Cargo.toml --baseline-rev 1.0.0 --release-type minor
