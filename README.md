@@ -13,6 +13,7 @@ wee_alloc is a widely used allocator in the Rust WebAssembly ecosystem, but the 
     <a href="https://github.com/bourumir-wyngs/wee_alloc_bw/actions/workflows/ci-windows.yml"><img src="https://github.com/bourumir-wyngs/wee_alloc_bw/actions/workflows/ci-windows.yml/badge.svg" alt="Windows CI" /></a>
     <a href="https://github.com/bourumir-wyngs/wee_alloc_bw/actions/workflows/ci-wasm.yml"><img src="https://github.com/bourumir-wyngs/wee_alloc_bw/actions/workflows/ci-wasm.yml/badge.svg" alt="Wasm CI" /></a>
     <a href="https://github.com/bourumir-wyngs/wee_alloc_bw/actions/workflows/ci-api-compat.yml"><img src="https://github.com/bourumir-wyngs/wee_alloc_bw/actions/workflows/ci-api-compat.yml/badge.svg" alt="wee_alloc 0.4.5 compatible" /></a>
+    <a href="https://github.com/bourumir-wyngs/wee_alloc_bw/actions/workflows/ci-miri.yml"><img src="https://github.com/bourumir-wyngs/wee_alloc_bw/actions/workflows/ci-miri.yml/badge.svg" alt="Miri CI" /></a>
     <a href="https://crates.io/crates/wee_alloc_bw"><img src="https://img.shields.io/crates/v/wee_alloc_bw.svg?style=flat-square" alt="Crates.io version" /></a>
     <a href="https://crates.io/crates/wee_alloc_bw"><img src="https://img.shields.io/crates/d/wee_alloc_bw.svg?style=flat-square" alt="Crates.io downloads" /></a>
     <a href="https://docs.rs/wee_alloc_bw"><img src="https://img.shields.io/badge/docs-latest-blue.svg?style=flat-square" alt="docs.rs docs" /></a>

@@ -1,0 +1,32 @@
+name: Miri CI
+
+on:
+  push:
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  miri:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust nightly with miri
+        uses: dtolnay/rust-toolchain@nightly
+        with:
+          components: miri, rust-src
+
+      - name: Cache cargo artifacts
+        uses: Swatinem/rust-cache@v2
+
+      - name: Run miri tests
+        env:
+          WEE_ALLOC_STATIC_ARRAY_BACKEND_BYTES: "16777216"
+          MIRIFLAGS: "-Zmiri-disable-isolation -Zmiri-strict-provenance"
+        run: |
+          cargo miri test -p wee_alloc_bw --features "extra_assertions size_classes static_array_backend"
+          cargo miri test -p wee_alloc_bw
