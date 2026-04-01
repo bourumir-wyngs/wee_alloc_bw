@@ -1,4 +1,4 @@
-name: API Compatibility CI
+name: wee_alloc 0.4.5 compatible
 
 on:
   push:
