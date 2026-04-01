@@ -22,12 +22,52 @@ pub(crate) unsafe fn alloc_pages(pages: Pages) -> Result<NonNull<u8>, AllocErr> 
     #[allow(static_mut_refs)]
     let mut offset = OFFSET.lock();
     let end = bytes.0.checked_add(*offset).ok_or_else(AllocErr::new)?;
-    if end < SCRATCH_LEN_BYTES {
+    if end <= SCRATCH_LEN_BYTES {
         let ptr = SCRATCH_HEAP.0[*offset..end].as_mut_ptr();
         *offset = end;
         NonNull::new(ptr).ok_or_else(AllocErr::new)
     } else {
         Err(AllocErr::new())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use memory_units::Pages;
+
+    #[test]
+    fn test_alloc_pages_exact_fit() {
+        // We want to test if allocating EXACTLY the remaining capacity of the scratch heap works.
+        // The bug was that `end < SCRATCH_LEN_BYTES` was used instead of `end <= SCRATCH_LEN_BYTES`.
+        
+        // Lock offset and reset it to test from a clean state.
+        #[allow(static_mut_refs)]
+        let mut offset = unsafe { OFFSET.lock() };
+        *offset = 0;
+        
+        let scratch_len = SCRATCH_LEN_BYTES;
+        
+        // Calculate how many pages fit into the scratch heap.
+        // We know from the library that 1 Page = 65536 bytes.
+        // memory_units::Pages(1).into() as Bytes is 65536.
+        let bytes_per_page = 65536;
+        let max_pages = scratch_len / bytes_per_page;
+        
+        if max_pages == 0 {
+            // Scratch heap too small for even one page, skip.
+            return;
+        }
+        
+        // We must drop the lock before calling alloc_pages!
+        drop(offset);
+        
+        // We allocate all available pages. 
+        // This will bring the internal OFFSET to exactly SCRATCH_LEN_BYTES if max_pages * bytes_per_page == scratch_len,
+        // which tests the exact-fit bug.
+        let result = unsafe { alloc_pages(Pages(max_pages)) };
+        
+        assert!(result.is_ok(), "Exact fit allocation failed! scratch_len: {}, max_pages: {}", scratch_len, max_pages);
     }
 }
 
