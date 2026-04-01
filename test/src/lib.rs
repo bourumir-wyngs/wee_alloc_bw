@@ -503,6 +503,75 @@ fn allocate_many_large() {
     .run_single_threaded();
 }
 
+#[test]
+fn reuses_large_allocations_after_overlapping_lifetimes() {
+    static WEE: wee_alloc_bw::WeeAlloc = wee_alloc_bw::WeeAlloc::INIT;
+    let a = &WEE;
+    let layout = Layout::from_size_align(80_000, 1).unwrap();
+
+    unsafe {
+        #[cfg(feature = "allocator_api")]
+        let first = a.allocate(layout).expect("first large allocation").cast::<u8>();
+        #[cfg(not(feature = "allocator_api"))]
+        let first = {
+            let p = a.alloc(layout);
+            assert!(!p.is_null());
+            std::ptr::NonNull::new(p).unwrap()
+        };
+
+        #[cfg(feature = "allocator_api")]
+        let second = a.allocate(layout).expect("second large allocation").cast::<u8>();
+        #[cfg(not(feature = "allocator_api"))]
+        let second = {
+            let p = a.alloc(layout);
+            assert!(!p.is_null());
+            std::ptr::NonNull::new(p).unwrap()
+        };
+
+        #[cfg(feature = "allocator_api")]
+        a.deallocate(first, layout);
+        #[cfg(not(feature = "allocator_api"))]
+        a.dealloc(first.as_ptr(), layout);
+
+        #[cfg(feature = "allocator_api")]
+        a.deallocate(second, layout);
+        #[cfg(not(feature = "allocator_api"))]
+        a.dealloc(second.as_ptr(), layout);
+
+        #[cfg(feature = "allocator_api")]
+        let third = a.allocate(layout).expect("third large allocation").cast::<u8>();
+        #[cfg(not(feature = "allocator_api"))]
+        let third = {
+            let p = a.alloc(layout);
+            assert!(!p.is_null());
+            std::ptr::NonNull::new(p).unwrap()
+        };
+
+        #[cfg(feature = "allocator_api")]
+        let fourth = a.allocate(layout).expect("fourth large allocation").cast::<u8>();
+        #[cfg(not(feature = "allocator_api"))]
+        let fourth = {
+            let p = a.alloc(layout);
+            assert!(!p.is_null());
+            std::ptr::NonNull::new(p).unwrap()
+        };
+
+        let original = [first.as_ptr() as usize, second.as_ptr() as usize];
+        assert!(original.contains(&(third.as_ptr() as usize)));
+        assert!(original.contains(&(fourth.as_ptr() as usize)));
+
+        #[cfg(feature = "allocator_api")]
+        a.deallocate(third, layout);
+        #[cfg(not(feature = "allocator_api"))]
+        a.dealloc(third.as_ptr(), layout);
+
+        #[cfg(feature = "allocator_api")]
+        a.deallocate(fourth, layout);
+        #[cfg(not(feature = "allocator_api"))]
+        a.dealloc(fourth.as_ptr(), layout);
+    }
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 // Tests taken from

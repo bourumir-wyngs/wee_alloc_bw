@@ -894,7 +894,7 @@ where
 {
     // The previous cell in the free list (not to be confused with the current
     // cell's previously _adjacent_ cell).
-    let previous_free = head;
+    let mut previous_free = head;
 
     loop {
         let current_free = previous_free.get();
@@ -946,7 +946,7 @@ where
             return Ok(result);
         }
 
-        previous_free.set((*current_free.get()).next_free_raw.get());
+        previous_free = &(*current_free.get()).next_free_raw;
     }
 }
 
