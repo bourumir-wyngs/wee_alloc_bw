@@ -538,7 +538,7 @@ impl<'a> FreeCell<'a> {
             },
         );
 
-        write_free_pattern(&*raw, size, policy);
+        write_free_pattern(raw, size, policy);
 
         raw
     }
@@ -546,7 +546,7 @@ impl<'a> FreeCell<'a> {
     #[allow(clippy::wrong_self_convention)]
     fn into_allocated_cell(&self, policy: &dyn AllocPolicy<'a>) -> &AllocatedCell<'a> {
         assert_local_cell_invariants(&self.header);
-        assert_is_poisoned_with_free_pattern(self, policy);
+        assert_is_poisoned_with_free_pattern(self as *const FreeCell, policy);
 
         CellHeader::set_allocated(&self.header.neighbors);
         unsafe { mem::transmute(self) }
@@ -631,8 +631,8 @@ impl<'a> FreeCell<'a> {
     }
 
     #[cfg(feature = "extra_assertions")]
-    fn tail_data(&self) -> *const u8 {
-        let data = unsafe { (self as *const FreeCell).offset(1) as *const u8 };
+    unsafe fn tail_data(cell: *const FreeCell<'a>) -> *const u8 {
+        let data = (cell as *const u8).add(size_of::<FreeCell>().0);
         assert_is_word_aligned(data);
         data
     }
@@ -666,9 +666,9 @@ impl<'a> AllocatedCell<'a> {
 }
 
 extra_only! {
-    fn write_free_pattern(cell: &FreeCell, size: Bytes, policy: &dyn AllocPolicy) {
+    fn write_free_pattern(cell: *const FreeCell, size: Bytes, policy: &dyn AllocPolicy) {
         unsafe {
-            let data = cell.tail_data();
+            let data = FreeCell::tail_data(cell);
             let pattern = policy.free_pattern();
             ptr::write_bytes(
                 data as *mut u8,
@@ -680,11 +680,11 @@ extra_only! {
 }
 
 extra_only! {
-    fn assert_is_poisoned_with_free_pattern(cell: &FreeCell, policy: &dyn AllocPolicy) {
+    fn assert_is_poisoned_with_free_pattern(cell: *const FreeCell, policy: &dyn AllocPolicy) {
         use core::slice;
         unsafe {
-            let size: Bytes = cell.tail_data_size();
-            let data = cell.tail_data();
+            let size: Bytes = (*cell).tail_data_size();
+            let data = FreeCell::tail_data(cell);
             let data = slice::from_raw_parts(data, size.0);
             let pattern = policy.free_pattern();
             extra_assert!(data.iter().all(|byte| *byte == pattern));
@@ -751,7 +751,7 @@ extra_only! {
             if left.is_null() {
                 return;
             }
-            assert_is_poisoned_with_free_pattern(&*left, policy);
+            assert_is_poisoned_with_free_pattern(left, policy);
 
             let mut right = (*left).next_free();
 
@@ -760,7 +760,7 @@ extra_only! {
                 if right.is_null() {
                     return;
                 }
-                assert_is_poisoned_with_free_pattern(&*right, policy);
+                assert_is_poisoned_with_free_pattern(right, policy);
 
                 assert!(left != right, "free list should not have cycles");
                 assert!((*right).header.is_free(), "cells in free list should never be allocated");
@@ -771,11 +771,11 @@ extra_only! {
                 if right.is_null() {
                     return;
                 }
-                assert_is_poisoned_with_free_pattern(&*right, policy);
+                assert_is_poisoned_with_free_pattern(right, policy);
 
                 left = (*left).next_free();
                 assert_local_cell_invariants(left as *const CellHeader);
-                assert_is_poisoned_with_free_pattern(&*left, policy);
+                assert_is_poisoned_with_free_pattern(left, policy);
 
                 assert!(left != right, "free list should not have cycles");
                 assert!((*right).header.is_free(), "cells in free list should never be allocated");
@@ -1230,7 +1230,7 @@ impl<'a> WeeAlloc<'a> {
                         // Remove `next` from the physical neighbors list too.
                         next.header.neighbors.remove();
 
-                        write_free_pattern(prev, prev.header.size(), policy);
+                        write_free_pattern(prev as *const FreeCell, prev.header.size(), policy);
                         assert_is_valid_free_list(head.get(), policy);
                         return;
                     }
@@ -1242,7 +1242,7 @@ impl<'a> WeeAlloc<'a> {
                             CellHeader::set_next_cell_is_invalid(&prev.header.neighbors);
                         }
 
-                        write_free_pattern(prev, prev.header.size(), policy);
+                        write_free_pattern(prev as *const FreeCell, prev.header.size(), policy);
                         assert_is_valid_free_list(head.get(), policy);
                         return;
                     }
@@ -1262,7 +1262,7 @@ impl<'a> WeeAlloc<'a> {
                         // Remove `next` physically; `free` remains the surviving header.
                         next.header.neighbors.remove();
 
-                        write_free_pattern(free, free.header.size(), policy);
+                        write_free_pattern(free as *const FreeCell, free.header.size(), policy);
                         assert_is_valid_free_list(head.get(), policy);
                         return;
                     }
