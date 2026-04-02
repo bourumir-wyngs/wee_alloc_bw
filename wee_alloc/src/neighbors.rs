@@ -74,23 +74,39 @@ where
     T: 'a + HasNeighbors<'a, T>,
 {
     #[inline]
+    fn bits(raw: *const T) -> usize {
+        raw.addr() & Self::BITS_MASK
+    }
+
+    #[inline]
+    fn untagged(raw: *const T) -> *const T {
+        raw.map_addr(|addr| addr & Self::PTR_MASK)
+    }
+
+    #[inline]
+    fn with_bits(raw: *const T, bits: usize) -> *const T {
+        extra_assert_eq!(bits & Self::PTR_MASK, 0);
+        raw.map_addr(|addr| (addr & Self::PTR_MASK) | bits)
+    }
+
+    #[inline]
     pub fn get_next_bit_1(&self) -> bool {
-        self.next_raw.get() as usize & Self::BIT_1 != 0
+        Self::bits(self.next_raw.get()) & Self::BIT_1 != 0
     }
 
     #[inline]
     pub fn get_next_bit_2(&self) -> bool {
-        self.next_raw.get() as usize & Self::BIT_2 != 0
+        Self::bits(self.next_raw.get()) & Self::BIT_2 != 0
     }
 
     #[inline]
     pub fn get_prev_bit_1(&self) -> bool {
-        self.prev_raw.get() as usize & Self::BIT_1 != 0
+        Self::bits(self.prev_raw.get()) & Self::BIT_1 != 0
     }
 
     #[inline]
     pub fn get_prev_bit_2(&self) -> bool {
-        self.prev_raw.get() as usize & Self::BIT_2 != 0
+        Self::bits(self.prev_raw.get()) & Self::BIT_2 != 0
     }
 }
 
@@ -102,30 +118,26 @@ where
 {
     #[inline]
     pub fn set_next_bit_1(&self) {
-        let next_raw = self.next_raw.get() as usize;
-        let next_raw = next_raw | Self::BIT_1;
-        self.next_raw.set(next_raw as *const T);
+        self.next_raw
+            .set(Self::with_bits(self.next_raw.get(), Self::bits(self.next_raw.get()) | Self::BIT_1));
     }
 
     #[inline]
     pub fn set_next_bit_2(&self) {
-        let next_raw = self.next_raw.get() as usize;
-        let next_raw = next_raw | Self::BIT_2;
-        self.next_raw.set(next_raw as *const T);
+        self.next_raw
+            .set(Self::with_bits(self.next_raw.get(), Self::bits(self.next_raw.get()) | Self::BIT_2));
     }
 
     #[inline]
     pub fn set_prev_bit_1(&self) {
-        let prev_raw = self.prev_raw.get() as usize;
-        let prev_raw = prev_raw | Self::BIT_1;
-        self.prev_raw.set(prev_raw as *const T);
+        self.prev_raw
+            .set(Self::with_bits(self.prev_raw.get(), Self::bits(self.prev_raw.get()) | Self::BIT_1));
     }
 
     #[inline]
     pub fn set_prev_bit_2(&self) {
-        let prev_raw = self.prev_raw.get() as usize;
-        let prev_raw = prev_raw | Self::BIT_2;
-        self.prev_raw.set(prev_raw as *const T);
+        self.prev_raw
+            .set(Self::with_bits(self.prev_raw.get(), Self::bits(self.prev_raw.get()) | Self::BIT_2));
     }
 }
 
@@ -137,30 +149,26 @@ where
 {
     #[inline]
     pub fn clear_next_bit_1(&self) {
-        let next_raw = self.next_raw.get() as usize;
-        let next_raw = next_raw & !Self::BIT_1;
-        self.next_raw.set(next_raw as *const T);
+        self.next_raw
+            .set(Self::with_bits(self.next_raw.get(), Self::bits(self.next_raw.get()) & !Self::BIT_1));
     }
 
     #[inline]
     pub fn clear_next_bit_2(&self) {
-        let next_raw = self.next_raw.get() as usize;
-        let next_raw = next_raw & !Self::BIT_2;
-        self.next_raw.set(next_raw as *const T);
+        self.next_raw
+            .set(Self::with_bits(self.next_raw.get(), Self::bits(self.next_raw.get()) & !Self::BIT_2));
     }
 
     #[inline]
     pub fn clear_prev_bit_1(&self) {
-        let prev_raw = self.prev_raw.get() as usize;
-        let prev_raw = prev_raw & !Self::BIT_1;
-        self.prev_raw.set(prev_raw as *const T);
+        self.prev_raw
+            .set(Self::with_bits(self.prev_raw.get(), Self::bits(self.prev_raw.get()) & !Self::BIT_1));
     }
 
     #[inline]
     pub fn clear_prev_bit_2(&self) {
-        let prev_raw = self.prev_raw.get() as usize;
-        let prev_raw = prev_raw & !Self::BIT_2;
-        self.prev_raw.set(prev_raw as *const T);
+        self.prev_raw
+            .set(Self::with_bits(self.prev_raw.get(), Self::bits(self.prev_raw.get()) & !Self::BIT_2));
     }
 }
 
@@ -171,16 +179,12 @@ where
 {
     #[inline]
     pub fn next_unchecked(&self) -> *const T {
-        let next = self.next_raw.get() as usize;
-        let next = next & Self::PTR_MASK;
-        next as *const T
+        Self::untagged(self.next_raw.get())
     }
 
     #[inline]
     pub fn prev_unchecked(&self) -> *const T {
-        let prev = self.prev_raw.get() as usize;
-        let prev = prev & Self::PTR_MASK;
-        prev as *const T
+        Self::untagged(self.prev_raw.get())
     }
 
     #[inline]
@@ -203,22 +207,16 @@ where
 {
     #[inline]
     pub unsafe fn set_next(&self, next: *const T) {
-        let next = next as usize;
-        extra_assert_eq!(next & Self::BITS_MASK, 0);
-        let old_next = self.next_raw.get() as usize;
-        let old_bits = old_next & Self::BITS_MASK;
-        let next = next | old_bits;
-        self.next_raw.set(next as *const T);
+        extra_assert_eq!(next.addr() & Self::BITS_MASK, 0);
+        let old_bits = Self::bits(self.next_raw.get());
+        self.next_raw.set(Self::with_bits(next, old_bits));
     }
 
     #[inline]
     pub unsafe fn set_prev(&self, prev: *const T) {
-        let prev = prev as usize;
-        extra_assert_eq!(prev & Self::BITS_MASK, 0);
-        let old_prev = self.prev_raw.get() as usize;
-        let old_bits = old_prev & Self::BITS_MASK;
-        let prev = prev | old_bits;
-        self.prev_raw.set(prev as *const T);
+        extra_assert_eq!(prev.addr() & Self::BITS_MASK, 0);
+        let old_bits = Self::bits(self.prev_raw.get());
+        self.prev_raw.set(Self::with_bits(prev, old_bits));
     }
 }
 
@@ -281,18 +279,21 @@ where
     }
 
     #[inline]
-    pub fn append(me: &T, neighbor: &T) {
-        extra_assert!(neighbor.as_ref().next_unchecked().is_null());
-        extra_assert!(neighbor.as_ref().prev_unchecked().is_null());
+    pub unsafe fn append_raw(me: *const T, neighbor: *const T) {
+        extra_assert!((*neighbor).as_ref().next_unchecked().is_null());
+        extra_assert!((*neighbor).as_ref().prev_unchecked().is_null());
 
-        unsafe {
-            neighbor.as_ref().set_next(me.as_ref().next_unchecked());
-            if let Some(next) = me.as_ref().next() {
-                next.as_ref().set_prev(neighbor);
-            }
-
-            neighbor.as_ref().set_prev(me);
-            me.as_ref().set_next(neighbor);
+        (*neighbor).as_ref().set_next((*me).as_ref().next_unchecked());
+        if let Some(next) = (*me).as_ref().next() {
+            next.as_ref().set_prev(neighbor);
         }
+
+        (*neighbor).as_ref().set_prev(me);
+        (*me).as_ref().set_next(neighbor);
+    }
+
+    #[inline]
+    pub fn append(me: &T, neighbor: &T) {
+        unsafe { Self::append_raw(me, neighbor) }
     }
 }
