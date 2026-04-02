@@ -3,6 +3,7 @@
 Unreleased
 
 * Fix `extra_assertions` free-cell poisoning helpers to use raw allocation pointers for trailing payload access, avoiding Miri-reported UB from deriving tail writes through `&FreeCell` references.
+* Fix additional strict-provenance/Miri issues in intrusive free-list pointer handling by replacing integer-pointer tag manipulation with pointer address APIs and by keeping allocation/free/split paths on raw allocation-origin pointers end-to-end.
 * Fixed long-lived fragmentation by implementing an eager splice-out strategy for deallocation, replacing the delayed-merge mechanism for the right neighbor.
 * Fix a large-allocation free-list traversal bug that could leak memory when overlapping large allocations were freed and later reallocated instead of reusing both freed blocks [106](https://github.com/rustwasm/wee_alloc/issues/106)
 * Fix an integer overflow in `LargeAllocPolicy::new_cell_for_free_list` that caused incorrect memory allocation and potential memory leaks when requesting very large sizes (e.g., `usize::MAX - 8`) [100](https://github.com/rustwasm/wee_alloc/issues/100)

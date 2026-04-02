@@ -2,7 +2,7 @@ use super::{AllocErr};
 use const_init::ConstInit;
 #[cfg(feature = "extra_assertions")]
 use core::cell::Cell;
-use core::ptr::NonNull;
+use core::ptr::{self, NonNull};
 use memory_units::{Bytes, Pages};
 use spin::Mutex;
 
@@ -21,9 +21,10 @@ pub(crate) unsafe fn alloc_pages(pages: Pages) -> Result<NonNull<u8>, AllocErr> 
     let bytes: Bytes = pages.into();
     #[allow(static_mut_refs)]
     let mut offset = OFFSET.lock();
-    let end = bytes.0.checked_add(*offset).ok_or_else(AllocErr::new)?;
+    let start = *offset;
+    let end = bytes.0.checked_add(start).ok_or_else(AllocErr::new)?;
     if end <= SCRATCH_LEN_BYTES {
-        let ptr = SCRATCH_HEAP.0[*offset..end].as_mut_ptr();
+        let ptr = ptr::addr_of_mut!(SCRATCH_HEAP.0).cast::<u8>().add(start);
         *offset = end;
         NonNull::new(ptr).ok_or_else(AllocErr::new)
     } else {
