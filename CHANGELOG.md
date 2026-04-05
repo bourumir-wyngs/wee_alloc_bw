@@ -7,7 +7,7 @@ Unreleased
 * Fixed long-lived fragmentation by implementing an eager splice-out strategy for deallocation, replacing the delayed-merge mechanism for the right neighbor.
 * Fix a large-allocation free-list traversal bug that could leak memory when overlapping large allocations were freed and later reallocated instead of reusing both freed blocks [106](https://github.com/rustwasm/wee_alloc/issues/106)
 * Fix an integer overflow in `LargeAllocPolicy::new_cell_for_free_list` that caused incorrect memory allocation and potential memory leaks when requesting very large sizes (e.g., `usize::MAX - 8`) [100](https://github.com/rustwasm/wee_alloc/issues/100)
-* Added `WeeAlloc::stats()` and `AllocStats` to allow monitoring the allocator's internal state (free list counts and total free bytes).
+* Added `WeeAlloc::stats()` and `AllocStats` to allow monitoring the allocator's internal state (free list counts and total free bytes), gated behind the default-off `instrumentation` feature.
 * Investigated memory leak cases listed in [106](https://github.com/rustwasm/wee_alloc/issues/106), but seems it does not leak the way described. Maybe this was fixed.
 
 

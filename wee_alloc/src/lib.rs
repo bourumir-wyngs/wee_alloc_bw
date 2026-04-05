@@ -1052,6 +1052,7 @@ unsafe fn alloc_with_refill<'a>(
     result
 }
 
+#[cfg(feature = "instrumentation")]
 /// Statistics about the allocator's internal state.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct AllocStats {
@@ -1088,6 +1089,7 @@ impl<'a> ConstInit for WeeAlloc<'a> {
 }
 
 impl<'a> WeeAlloc<'a> {
+    #[cfg(feature = "instrumentation")]
     /// Returns statistics about the allocator's internal state.
     pub fn stats(&self) -> AllocStats {
         let mut stats = AllocStats::default();
@@ -1368,9 +1370,11 @@ unsafe impl GlobalAlloc for WeeAlloc<'static> {
 
 #[cfg(test)]
 mod tests {
+    #[cfg(feature = "instrumentation")]
     use super::*;
 
     #[test]
+    #[cfg(feature = "instrumentation")]
     fn test_merge_free_left_free_right_then_free_middle() {
         let alloc = WeeAlloc::INIT;
         let layout = Layout::from_size_align(100, 1).unwrap();
@@ -1390,6 +1394,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "instrumentation")]
     fn test_merge_free_right_then_free_left() {
         let alloc = WeeAlloc::INIT;
         let layout = Layout::from_size_align(100, 1).unwrap();
@@ -1407,6 +1412,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(feature = "instrumentation")]
     fn test_leak() {
         let test_cases = [
             (85196, 80000),

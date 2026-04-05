@@ -23,6 +23,9 @@ travis-ci = { repository = "rustwasm/wee_alloc" }
 default = ["size_classes"]
 nightly = []
 
+# Enable allocator state reporting for tests and diagnostics.
+instrumentation = []
+
 # Enable extra, expensive integrity allocations.
 extra_assertions = []
 
