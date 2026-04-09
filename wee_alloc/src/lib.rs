@@ -266,6 +266,7 @@ use const_init::ConstInit;
 use core::cell::Cell;
 use core::cmp;
 use core::marker::Sync;
+#[cfg(test)]
 use core::mem;
 use core::ptr::{self, NonNull};
 use memory_units::{size_of, ByteSize, Bytes, Pages, RoundUpTo, Words};
@@ -1374,6 +1375,7 @@ mod tests {
     #[cfg(feature = "instrumentation")]
     use super::*;
 
+    #[cfg(feature = "instrumentation")]
     const fn reduce_for_miri(base: usize, factor: usize) -> usize {
         if cfg!(miri) {
             let reduced = base / factor;

@@ -2,6 +2,7 @@
 name = "wee_alloc_example"
 version = "0.1.0"
 authors = ["Nick Fitzgerald <fitzgen@gmail.com>"]
+edition = "2015"
 
 [dependencies.wee_alloc_bw]
 path = "../wee_alloc"

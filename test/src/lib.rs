@@ -1,7 +1,6 @@
 #![feature(allocator_api)]
 
 extern crate histo;
-#[macro_use]
 extern crate quickcheck;
 #[macro_use]
 extern crate cfg_if;

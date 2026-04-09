@@ -1,4 +1,4 @@
-use super::AllocErr;
+use super::{AllocErr, AllocErrExt};
 use const_init::ConstInit;
 #[cfg(feature = "extra_assertions")]
 use core::cell::Cell;

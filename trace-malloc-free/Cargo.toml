@@ -2,6 +2,7 @@
 name = "trace-malloc-free"
 version = "0.1.0"
 authors = ["Nick Fitzgerald <fitzgen@gmail.com>"]
+edition = "2015"
 
 [dependencies]
 quicli = "0.4"

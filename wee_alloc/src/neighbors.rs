@@ -309,9 +309,4 @@ where
         (*neighbor).as_ref().set_prev(me);
         (*me).as_ref().set_next(neighbor);
     }
-
-    #[inline]
-    pub fn append(me: &T, neighbor: &T) {
-        unsafe { Self::append_raw(me, neighbor) }
-    }
 }
