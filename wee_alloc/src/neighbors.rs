@@ -118,26 +118,34 @@ where
 {
     #[inline]
     pub fn set_next_bit_1(&self) {
-        self.next_raw
-            .set(Self::with_bits(self.next_raw.get(), Self::bits(self.next_raw.get()) | Self::BIT_1));
+        self.next_raw.set(Self::with_bits(
+            self.next_raw.get(),
+            Self::bits(self.next_raw.get()) | Self::BIT_1,
+        ));
     }
 
     #[inline]
     pub fn set_next_bit_2(&self) {
-        self.next_raw
-            .set(Self::with_bits(self.next_raw.get(), Self::bits(self.next_raw.get()) | Self::BIT_2));
+        self.next_raw.set(Self::with_bits(
+            self.next_raw.get(),
+            Self::bits(self.next_raw.get()) | Self::BIT_2,
+        ));
     }
 
     #[inline]
     pub fn set_prev_bit_1(&self) {
-        self.prev_raw
-            .set(Self::with_bits(self.prev_raw.get(), Self::bits(self.prev_raw.get()) | Self::BIT_1));
+        self.prev_raw.set(Self::with_bits(
+            self.prev_raw.get(),
+            Self::bits(self.prev_raw.get()) | Self::BIT_1,
+        ));
     }
 
     #[inline]
     pub fn set_prev_bit_2(&self) {
-        self.prev_raw
-            .set(Self::with_bits(self.prev_raw.get(), Self::bits(self.prev_raw.get()) | Self::BIT_2));
+        self.prev_raw.set(Self::with_bits(
+            self.prev_raw.get(),
+            Self::bits(self.prev_raw.get()) | Self::BIT_2,
+        ));
     }
 }
 
@@ -149,26 +157,34 @@ where
 {
     #[inline]
     pub fn clear_next_bit_1(&self) {
-        self.next_raw
-            .set(Self::with_bits(self.next_raw.get(), Self::bits(self.next_raw.get()) & !Self::BIT_1));
+        self.next_raw.set(Self::with_bits(
+            self.next_raw.get(),
+            Self::bits(self.next_raw.get()) & !Self::BIT_1,
+        ));
     }
 
     #[inline]
     pub fn clear_next_bit_2(&self) {
-        self.next_raw
-            .set(Self::with_bits(self.next_raw.get(), Self::bits(self.next_raw.get()) & !Self::BIT_2));
+        self.next_raw.set(Self::with_bits(
+            self.next_raw.get(),
+            Self::bits(self.next_raw.get()) & !Self::BIT_2,
+        ));
     }
 
     #[inline]
     pub fn clear_prev_bit_1(&self) {
-        self.prev_raw
-            .set(Self::with_bits(self.prev_raw.get(), Self::bits(self.prev_raw.get()) & !Self::BIT_1));
+        self.prev_raw.set(Self::with_bits(
+            self.prev_raw.get(),
+            Self::bits(self.prev_raw.get()) & !Self::BIT_1,
+        ));
     }
 
     #[inline]
     pub fn clear_prev_bit_2(&self) {
-        self.prev_raw
-            .set(Self::with_bits(self.prev_raw.get(), Self::bits(self.prev_raw.get()) & !Self::BIT_2));
+        self.prev_raw.set(Self::with_bits(
+            self.prev_raw.get(),
+            Self::bits(self.prev_raw.get()) & !Self::BIT_2,
+        ));
     }
 }
 
@@ -283,7 +299,9 @@ where
         extra_assert!((*neighbor).as_ref().next_unchecked().is_null());
         extra_assert!((*neighbor).as_ref().prev_unchecked().is_null());
 
-        (*neighbor).as_ref().set_next((*me).as_ref().next_unchecked());
+        (*neighbor)
+            .as_ref()
+            .set_next((*me).as_ref().next_unchecked());
         if let Some(next) = (*me).as_ref().next() {
             next.as_ref().set_prev(neighbor);
         }

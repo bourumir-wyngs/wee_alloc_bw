@@ -19,7 +19,7 @@ use std::alloc::GlobalAlloc;
 use std::alloc::Layout;
 use std::f64;
 use std::fs;
-use std::io::Read;
+use std::io::{BufRead, BufReader};
 use std::mem;
 use std::path::Path;
 use std::str::FromStr;
@@ -35,6 +35,19 @@ pub enum Operation {
 }
 
 pub use Operation::*;
+
+const fn reduce_for_miri(base: usize, factor: usize) -> usize {
+    if cfg!(miri) {
+        let reduced = base / factor;
+        if reduced < 3 {
+            3
+        } else {
+            reduced
+        }
+    } else {
+        base
+    }
+}
 
 impl Operation {
     #[inline]
@@ -117,13 +130,13 @@ impl FromStr for Operations {
 }
 
 #[cfg(not(feature = "size_classes"))]
-const NUM_OPERATIONS: usize = 100;
+const NUM_OPERATIONS: usize = reduce_for_miri(100, 100);
 
 #[cfg(all(feature = "size_classes", feature = "extra_assertions"))]
-const NUM_OPERATIONS: usize = 2_000;
+const NUM_OPERATIONS: usize = reduce_for_miri(2_000, 100);
 
 #[cfg(all(feature = "size_classes", not(feature = "extra_assertions")))]
-const NUM_OPERATIONS: usize = 50_000;
+const NUM_OPERATIONS: usize = reduce_for_miri(50_000, 100);
 
 impl Arbitrary for Operations {
     #[inline(never)]
@@ -355,12 +368,15 @@ impl Operations {
     pub fn read_trace(trace: &str, cap: usize) -> Self {
         let trace = Path::new(trace);
         let trace_dir = Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/traces"));
-        let mut file = fs::File::open(trace_dir.join(trace)).unwrap();
-        let mut contents = String::new();
-        file.read_to_string(&mut contents).unwrap();
-        let mut ops: Self = contents.parse().unwrap();
-        ops.0.truncate(cap);
-        ops
+        let file = fs::File::open(trace_dir.join(trace)).unwrap();
+        let reader = BufReader::new(file);
+        Operations(
+            reader
+                .lines()
+                .take(cap)
+                .map(|line| line.unwrap().parse().unwrap())
+                .collect(),
+        )
     }
 }
 
@@ -384,10 +400,11 @@ macro_rules! run_quickchecks {
 // Let the test harness run each of our single threaded quickchecks concurrently
 // with each other.
 run_quickchecks!(quickchecks_0);
+#[cfg(not(miri))]
 run_quickchecks!(quickchecks_1);
 // Limit the extent of the stress testing for the limited-size static backend
 cfg_if! {
-    if #[cfg(not(feature = "static_array_backend"))] {
+    if #[cfg(all(not(miri), not(feature = "static_array_backend")))] {
         run_quickchecks!(quickchecks_2);
         run_quickchecks!(quickchecks_3);
         run_quickchecks!(quickchecks_4);
@@ -398,6 +415,7 @@ cfg_if! {
 }
 
 #[test]
+#[cfg(not(miri))]
 fn multi_threaded_quickchecks() {
     quickcheck::QuickCheck::new().tests(1).quickcheck(
         Operations::run_multi_threaded as fn(Operations, Operations, Operations, Operations) -> (),
@@ -407,8 +425,9 @@ fn multi_threaded_quickchecks() {
 #[cfg(test)]
 static ALIGNS: [usize; 10] = [1, 2, 4, 8, 16, 32, 64, 128, 256, 512];
 
-quickcheck! {
-    fn single_allocation_with_size_and_align(size: usize, align: usize) -> () {
+#[test]
+fn single_allocation_with_size_and_align() {
+    fn single_allocation_with_size_and_align_case(size: usize, align: usize) {
         let size = size % 65536;
         let align = ALIGNS[align % ALIGNS.len()];
 
@@ -419,36 +438,45 @@ quickcheck! {
         #[cfg(not(feature = "allocator_api"))]
         let _ = unsafe { WEE.alloc(layout) };
     }
+
+    quickcheck::QuickCheck::new()
+        .tests(reduce_for_miri(100, 100) as u64)
+        .quickcheck(single_allocation_with_size_and_align_case as fn(usize, usize) -> ());
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 
 macro_rules! test_trace {
-    ($name:ident, $trace:expr) => {
+    ($name:ident, $trace:expr, $trace_len:expr) => {
         #[test]
         fn $name() {
             #[cfg(feature = "size_classes")]
-            let cap = usize::max_value();
+            let cap = reduce_for_miri($trace_len, 100);
             #[cfg(not(feature = "size_classes"))]
-            let cap = 200; // limit number of steps because without size_classes it is very slow.
+            let cap = reduce_for_miri(usize::min($trace_len, 200), 100);
             let ops = Operations::read_trace($trace, cap);
             ops.run_single_threaded();
         }
     };
 }
 
-test_trace!(test_trace_cpp_demangle, "../traces/cpp-demangle.trace");
-test_trace!(test_trace_dogfood, "../traces/dogfood.trace");
-test_trace!(test_trace_ffmpeg, "../traces/ffmpeg.trace");
-test_trace!(test_trace_find, "../traces/find.trace");
-test_trace!(test_trace_gcc_hello, "../traces/gcc-hello.trace");
+test_trace!(test_trace_cpp_demangle, "../traces/cpp-demangle.trace", 102);
+test_trace!(test_trace_dogfood, "../traces/dogfood.trace", 46_076);
+test_trace!(test_trace_ffmpeg, "../traces/ffmpeg.trace", 3_637);
+test_trace!(test_trace_find, "../traces/find.trace", 1_130);
+test_trace!(test_trace_gcc_hello, "../traces/gcc-hello.trace", 17_775);
 test_trace!(
     test_trace_grep_random_data,
-    "../traces/grep-random-data.trace"
+    "../traces/grep-random-data.trace",
+    198
 );
-test_trace!(test_trace_grep_recursive, "../traces/grep-recursive.trace");
-test_trace!(test_trace_ls, "../traces/ls.trace");
-test_trace!(test_trace_source_map, "../traces/source-map.trace");
+test_trace!(
+    test_trace_grep_recursive,
+    "../traces/grep-recursive.trace",
+    1_276
+);
+test_trace!(test_trace_ls, "../traces/ls.trace", 82);
+test_trace!(test_trace_source_map, "../traces/source-map.trace", 2_402);
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -475,8 +503,8 @@ fn regression_test_3() {
 #[test]
 fn allocate_size_zero() {
     Operations(
-        std::iter::repeat_n(Alloc(0), 1000)
-            .chain((0..1000).map(Free))
+        std::iter::repeat_n(Alloc(0), reduce_for_miri(1000, 100))
+            .chain((0..reduce_for_miri(1000, 100)).map(Free))
             .collect(),
     )
     .run_single_threaded();
@@ -484,14 +512,15 @@ fn allocate_size_zero() {
 
 #[test]
 fn allocate_many_small() {
+    let num_allocations = reduce_for_miri(100, 10);
     Operations(
-        std::iter::repeat_n(Alloc(16 * mem::size_of::<usize>()), 100)
-            .chain((0..100).map(Free))
+        std::iter::repeat_n(Alloc(16 * mem::size_of::<usize>()), num_allocations)
+            .chain((0..num_allocations).map(Free))
             .chain(std::iter::repeat_n(
                 Alloc(256 * mem::size_of::<usize>()),
-                100,
+                num_allocations,
             ))
-            .chain((0..100).map(|i| Free(i + 100)))
+            .chain((0..num_allocations).map(|i| Free(i + num_allocations)))
             .collect(),
     )
     .run_single_threaded();
@@ -499,14 +528,15 @@ fn allocate_many_small() {
 
 #[test]
 fn allocate_many_large() {
+    let num_allocations = reduce_for_miri(100, 10);
     Operations(
-        std::iter::repeat_n(Alloc(257 * mem::size_of::<usize>()), 100)
-            .chain((0..100).map(Free))
+        std::iter::repeat_n(Alloc(257 * mem::size_of::<usize>()), num_allocations)
+            .chain((0..num_allocations).map(Free))
             .chain(std::iter::repeat_n(
                 Alloc(1024 * mem::size_of::<usize>()),
-                100,
+                num_allocations,
             ))
-            .chain((0..100).map(|i| Free(i + 100)))
+            .chain((0..num_allocations).map(|i| Free(i + num_allocations)))
             .collect(),
     )
     .run_single_threaded();
@@ -520,7 +550,10 @@ fn reuses_large_allocations_after_overlapping_lifetimes() {
 
     unsafe {
         #[cfg(feature = "allocator_api")]
-        let first = a.allocate(layout).expect("first large allocation").cast::<u8>();
+        let first = a
+            .allocate(layout)
+            .expect("first large allocation")
+            .cast::<u8>();
         #[cfg(not(feature = "allocator_api"))]
         let first = {
             let p = a.alloc(layout);
@@ -529,7 +562,10 @@ fn reuses_large_allocations_after_overlapping_lifetimes() {
         };
 
         #[cfg(feature = "allocator_api")]
-        let second = a.allocate(layout).expect("second large allocation").cast::<u8>();
+        let second = a
+            .allocate(layout)
+            .expect("second large allocation")
+            .cast::<u8>();
         #[cfg(not(feature = "allocator_api"))]
         let second = {
             let p = a.alloc(layout);
@@ -548,7 +584,10 @@ fn reuses_large_allocations_after_overlapping_lifetimes() {
         a.dealloc(second.as_ptr(), layout);
 
         #[cfg(feature = "allocator_api")]
-        let third = a.allocate(layout).expect("third large allocation").cast::<u8>();
+        let third = a
+            .allocate(layout)
+            .expect("third large allocation")
+            .cast::<u8>();
         #[cfg(not(feature = "allocator_api"))]
         let third = {
             let p = a.alloc(layout);
@@ -557,7 +596,10 @@ fn reuses_large_allocations_after_overlapping_lifetimes() {
         };
 
         #[cfg(feature = "allocator_api")]
-        let fourth = a.allocate(layout).expect("fourth large allocation").cast::<u8>();
+        let fourth = a
+            .allocate(layout)
+            .expect("fourth large allocation")
+            .cast::<u8>();
         #[cfg(not(feature = "allocator_api"))]
         let fourth = {
             let p = a.alloc(layout);
@@ -673,9 +715,9 @@ fn stress() {
     let mut rng = rand::rng();
     let mut ptrs = Vec::new();
     unsafe {
-        for _ in 0..100_000 {
-            let free = ptrs.len() > 0
-                && ((ptrs.len() < 1_000 && rng.random_ratio(1, 3)) || rng.random());
+        for _ in 0..reduce_for_miri(100_000, 100) {
+            let free =
+                ptrs.len() > 0 && ((ptrs.len() < 1_000 && rng.random_ratio(1, 3)) || rng.random());
             if free {
                 let idx = rng.random_range(0..ptrs.len());
                 let (ptr, layout): (std::ptr::NonNull<u8>, Layout) = ptrs.swap_remove(idx);
@@ -694,13 +736,13 @@ fn stress() {
                         rng.random_range(old.size()..old.size() * 2),
                         old.align(),
                     )
-                        .unwrap()
+                    .unwrap()
                 } else if old.size() > 10 {
                     Layout::from_size_align(
                         rng.random_range(old.size() / 2..old.size()),
                         old.align(),
                     )
-                        .unwrap()
+                    .unwrap()
                 } else {
                     continue;
                 };

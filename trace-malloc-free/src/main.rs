@@ -2,8 +2,8 @@ extern crate duct;
 extern crate regex;
 
 use regex::Regex;
-use std::env;
 use std::collections::HashMap;
+use std::env;
 use std::fs;
 use std::io::{BufWriter, Write};
 use std::path::PathBuf;
@@ -29,20 +29,26 @@ impl Cli {
         while let Some(arg) = args.next() {
             if command.is_empty() {
                 if arg == "-o" || arg == "--output" {
-                    output = Some(PathBuf::from(args.next().ok_or("missing value for --output")?));
+                    output = Some(PathBuf::from(
+                        args.next().ok_or("missing value for --output")?,
+                    ));
                     continue;
                 }
 
                 if arg == "--" {
-                    command.extend(args.map(|arg| arg.into_string().map_err(|_| "non-utf8 argument"))
-                        .collect::<Result<Vec<_>, _>>()?);
+                    command.extend(
+                        args.map(|arg| arg.into_string().map_err(|_| "non-utf8 argument"))
+                            .collect::<Result<Vec<_>, _>>()?,
+                    );
                     break;
                 }
             }
 
             command.push(arg.into_string().map_err(|_| "non-utf8 argument")?);
-            command.extend(args.map(|arg| arg.into_string().map_err(|_| "non-utf8 argument"))
-                .collect::<Result<Vec<_>, _>>()?);
+            command.extend(
+                args.map(|arg| arg.into_string().map_err(|_| "non-utf8 argument"))
+                    .collect::<Result<Vec<_>, _>>()?,
+            );
             break;
         }
 

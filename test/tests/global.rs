@@ -42,7 +42,7 @@ fn test_larger_than_word_alignment() {
 
     assert_eq!(mem::align_of::<Align32>(), 32);
 
-    for _ in 0..100 {
+    for _ in 0..if cfg!(miri) { 3 } else { 100 } {
         let b = Box::new(Align32(42));
 
         let p = Box::into_raw(b);

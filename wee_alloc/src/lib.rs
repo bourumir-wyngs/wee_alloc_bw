@@ -597,9 +597,7 @@ impl<'a> FreeCell<'a> {
         if data + size_of::<CellHeader>().0 + min_cell_size.0 <= split_and_aligned {
             let split_cell_head = split_and_aligned - size_of::<CellHeader>().0;
             let split_cell = unsafe {
-                let split_cell_ptr = (cell as *const u8)
-                    .map_addr(|_| split_cell_head)
-                    as *mut u8;
+                let split_cell_ptr = (cell as *const u8).map_addr(|_| split_cell_head) as *mut u8;
                 FreeCell::from_uninitialized(
                     unchecked_unwrap(NonNull::new(split_cell_ptr)),
                     Bytes(next - split_cell_head) - size_of::<CellHeader>(),
@@ -609,7 +607,10 @@ impl<'a> FreeCell<'a> {
             };
 
             unsafe {
-                Neighbors::append_raw(cell as *const CellHeader<'a>, split_cell as *const CellHeader<'a>);
+                Neighbors::append_raw(
+                    cell as *const CellHeader<'a>,
+                    split_cell as *const CellHeader<'a>,
+                );
             }
             free.clear_next_free_can_merge();
             if CellHeader::next_cell_is_invalid(&free.header.neighbors) {
@@ -947,16 +948,14 @@ where
             let current = &*current_free.get();
             current.clear_next_free_can_merge();
 
-            let prev_neighbor = unchecked_unwrap(
-                current.header.neighbors.prev().and_then(|p| {
-                    let prev = current.header.neighbors.prev_unchecked();
-                    if p.is_free() {
-                        Some(prev as *const FreeCell<'a>)
-                    } else {
-                        None
-                    }
-                }),
-            );
+            let prev_neighbor = unchecked_unwrap(current.header.neighbors.prev().and_then(|p| {
+                let prev = current.header.neighbors.prev_unchecked();
+                if p.is_free() {
+                    Some(prev as *const FreeCell<'a>)
+                } else {
+                    None
+                }
+            }));
 
             current.header.neighbors.remove();
             if CellHeader::next_cell_is_invalid(&current.header.neighbors) {
@@ -1214,28 +1213,30 @@ impl<'a> WeeAlloc<'a> {
             let free = allocated_cell_into_free_cell(cell, policy);
 
             if policy.should_merge_adjacent_free_cells() {
-                let next_slot = match (*free)
-                    .header
-                    .neighbors
-                    .next()
-                    .and_then(|n: &CellHeader<'a>| {
-                        let next = (*free).header.neighbors.next_unchecked();
-                        if n.is_free() {
-                            Some(next as *const FreeCell<'a>)
-                        } else {
-                            None
+                let next_slot =
+                    match (*free)
+                        .header
+                        .neighbors
+                        .next()
+                        .and_then(|n: &CellHeader<'a>| {
+                            let next = (*free).header.neighbors.next_unchecked();
+                            if n.is_free() {
+                                Some(next as *const FreeCell<'a>)
+                            } else {
+                                None
+                            }
+                        }) {
+                        Some(next) => {
+                            let slot = match find_free_list_slot(head, next as *const _, policy) {
+                                Ok(slot) => slot,
+                                Err(_) => unreachable!(
+                                    "adjacent free cell must already be in the free list"
+                                ),
+                            };
+                            Some(&*slot)
                         }
-                    })
-                {
-                    Some(next) => {
-                        let slot = match find_free_list_slot(head, next as *const _, policy) {
-                            Ok(slot) => slot,
-                            Err(_) => unreachable!("adjacent free cell must already be in the free list"),
-                        };
-                        Some(&*slot)
-                    }
-                    None => None,
-                };
+                        None => None,
+                    };
 
                 // The search above may have resolved older delayed merges.
                 let prev = (*free)
@@ -1370,6 +1371,19 @@ unsafe impl GlobalAlloc for WeeAlloc<'static> {
 mod tests {
     use super::*;
 
+    const fn reduce_for_miri(base: usize, factor: usize) -> usize {
+        if cfg!(miri) {
+            let reduced = base / factor;
+            if reduced == 0 {
+                1
+            } else {
+                reduced
+            }
+        } else {
+            base
+        }
+    }
+
     #[test]
     fn test_merge_free_left_free_right_then_free_middle() {
         let alloc = WeeAlloc::INIT;
@@ -1427,7 +1441,7 @@ mod tests {
             let alloc = WeeAlloc::INIT;
             let start_stats = alloc.stats();
 
-            for _ in 0..1000 {
+            for _ in 0..reduce_for_miri(1000, 100) {
                 let layout_a = Layout::from_size_align(size_a, 1).unwrap();
                 let layout_b = Layout::from_size_align(size_b, 1).unwrap();
 
