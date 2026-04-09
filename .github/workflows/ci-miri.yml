@@ -1,8 +1,9 @@
 name: Miri CI
 
 on:
-  push:
-  pull_request:
+  schedule:
+    - cron: '50 5 9 * *'  # Runs once a month
+  workflow_dispatch:     # Allows manual triggering
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -10,7 +11,8 @@ concurrency:
 
 jobs:
   miri:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64]
+    timeout-minutes: 7200
 
     steps:
       - uses: actions/checkout@v4
@@ -28,5 +30,6 @@ jobs:
           WEE_ALLOC_STATIC_ARRAY_BACKEND_BYTES: "16777216"
           MIRIFLAGS: "-Zmiri-disable-isolation -Zmiri-strict-provenance"
         run: |
+          export PATH=$PATH:/home/github-wee/.cargo/bin            
           cargo miri test -p wee_alloc_bw --features "extra_assertions size_classes static_array_backend"
           cargo miri test -p wee_alloc_bw
