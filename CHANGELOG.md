@@ -1,6 +1,6 @@
 ### 1.1.0
 
-Unreleased
+Released 2026/04/09
 
 * Fix `extra_assertions` free-cell poisoning helpers to use raw allocation pointers for trailing payload access, avoiding Miri-reported UB from deriving tail writes through `&FreeCell` references.
 * Fix additional strict-provenance/Miri issues in intrusive free-list pointer handling by replacing integer-pointer tag manipulation with pointer address APIs and by keeping allocation/free/split paths on raw allocation-origin pointers end-to-end.
